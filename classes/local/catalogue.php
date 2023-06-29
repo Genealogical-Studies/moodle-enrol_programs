@@ -293,7 +293,7 @@ EOT;
                   FROM {enrol_programs_programs} p
              LEFT JOIN {enrol_programs_allocations} pa ON pa.programid = p.id AND pa.userid = :userid1 AND pa.archived = 0
                  WHERE p.archived = 0 $searchwhere
-                       AND (p.public = 1 OR pa.id IS NOT NULL OR EXISTS (
+                       AND (p.\"public\" = 1 OR pa.id IS NOT NULL OR EXISTS (
                             SELECT cm.id
                               FROM {cohort_members} cm
                               JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid
@@ -383,7 +383,7 @@ EOT;
                   JOIN {enrol_programs_programs} p ON p.id = tt.itemid
              LEFT JOIN {enrol_programs_allocations} pa ON pa.programid = p.id AND pa.userid = :userid1 AND pa.archived = 0
                  WHERE p.archived = 0
-                       AND (p.public = 1 OR pa.id IS NOT NULL OR EXISTS (
+                       AND (p.\"public\" = 1 OR pa.id IS NOT NULL OR EXISTS (
                             SELECT cm.id
                               FROM {cohort_members} cm
                               JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid AND pc.programid = p.id
@@ -417,7 +417,7 @@ EOT;
                   JOIN {tag_instance} tt ON tt.itemid = p.id AND tt.itemtype = 'program' AND tt.tagid = :tagid AND tt.component = 'enrol_programs'
              LEFT JOIN {enrol_programs_allocations} pa ON pa.programid = p.id AND pa.userid = :userid1 AND pa.archived = 0
                  WHERE p.archived = 0
-                       AND (p.public = 1 OR pa.id IS NOT NULL OR EXISTS (
+                       AND (p.\"public\" = 1 OR pa.id IS NOT NULL OR EXISTS (
                              SELECT cm.id
                                FROM {cohort_members} cm
                                JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid AND pc.programid = p.id
