@@ -20,7 +20,7 @@ namespace enrol_programs\task;
  * Program cron.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -48,8 +48,11 @@ class cron extends \core\task\scheduled_task {
         \enrol_programs\local\allocation::fix_allocation_sources(null, null);
         \enrol_programs\local\allocation::fix_enrol_instances(null);
         \enrol_programs\local\allocation::fix_user_enrolments(null, null);
+        \enrol_programs\local\allocation_calendar_event::fix_allocation_calendar_events(null);
 
-        \enrol_programs\local\notification::trigger_notifications(null, null);
+        \enrol_programs\local\notification_manager::trigger_notifications(null, null);
+
+        \enrol_programs\local\source\manual::cleanup_uploaded_data();
 
         $trace->finished();
     }

@@ -20,7 +20,7 @@ namespace enrol_programs\local\form;
  * Edit user allocation.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -35,7 +35,7 @@ final class user_allocation_edit extends \local_openlms\dialog_form {
 
         $mform->addElement('static', 'userfullname', get_string('user'), fullname($user));
 
-        $mform->addElement('date_time_selector', 'timeallocated', get_string('allocationdate', 'enrol_programs'), ['optional = false']);
+        $mform->addElement('date_time_selector', 'timeallocated', get_string('allocationdate', 'enrol_programs'), ['optional' => false]);
         $mform->freeze('timeallocated');
 
         $mform->addElement('date_time_selector', 'timestart', get_string('programstart_date', 'enrol_programs'), ['optional' => false]);
@@ -60,17 +60,8 @@ final class user_allocation_edit extends \local_openlms\dialog_form {
     public function validation($allocation, $files) {
         $errors = parent::validation($allocation, $files);
 
-        if ($allocation['timedue'] && $allocation['timedue'] <= $allocation['timestart']) {
-            $errors['timedue'] = get_string('error');
-        }
-
-        if ($allocation['timeend'] && $allocation['timeend'] <= $allocation['timestart']) {
-            $errors['timeend'] = get_string('error');
-        }
-
-        if ($allocation['timeend'] && $allocation['timedue'] && $allocation['timedue'] > $allocation['timeend']) {
-            $errors['timedue'] = get_string('error');
-        }
+        $errors = array_merge($errors, \enrol_programs\local\allocation::validate_allocation_dates(
+            $allocation['timestart'], $allocation['timedue'], $allocation['timeend']));
 
         return $errors;
     }

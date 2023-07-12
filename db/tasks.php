@@ -18,7 +18,7 @@
  * Program enrolment tasks.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c] 2022 Open LMS (https://www.openlms.net/]
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -35,6 +35,16 @@ $tasks = array(
         'month' => '*',
         'dayofweek' => '*',
         'disabled' => 0
-    )
+    ),
+    array(
+        'classname' => '\enrol_programs\task\certificate',
+        'blocking' => 0,
+        'minute' => 'R',
+        'hour' => '*',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+        'disabled' => 0
+    ),
 );
 

@@ -21,16 +21,18 @@ use enrol_programs\local\source\base;
 use enrol_programs\local\source\cohort;
 use enrol_programs\local\source\manual;
 use enrol_programs\local\source\selfallocation;
+use enrol_programs\local\source\udplans;
 use enrol_programs\local\content\course;
 use enrol_programs\local\content\top;
 use enrol_programs\local\content\set;
+use enrol_programs\local\allocation_calendar_event;
 use stdClass;
 
 /**
  * Program allocation abstraction.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -42,12 +44,18 @@ final class allocation {
      */
     public static function get_source_classes(): array {
         // Note: in theory this could be extended to load arbitrary classes.
-        return [
+        $types = [
             manual::get_type() => manual::class,
             selfallocation::get_type() => selfallocation::class,
             approval::get_type() => approval::class,
             cohort::get_type() => cohort::class,
         ];
+
+        if (file_exists(__DIR__ . '/../../../../admin/tool/udplans/version.php')) {
+            $types[udplans::get_type()] = udplans::class;
+        }
+
+        return $types;
     }
 
     /**
@@ -65,6 +73,104 @@ final class allocation {
         }
 
         return $result;
+    }
+
+    /**
+     * Returns default allocated program start date.
+     *
+     * @param stdClass $program
+     * @param int $timeallocated
+     * @return int
+     */
+    public static function get_default_timestart(stdClass $program, int $timeallocated): int {
+        $startdate = (object)json_decode($program->startdatejson);
+        if ($startdate->type === 'allocation') {
+            return $timeallocated;
+        } else if ($startdate->type === 'date') {
+            return (int)$startdate->date;
+        } else if ($startdate->type === 'delay') {
+            $d = new \DateTime('@' . $timeallocated);
+            $d->add(new \DateInterval($startdate->delay));
+            return $d->getTimestamp();
+        } else {
+            throw new \coding_exception('invalid program start');
+        }
+    }
+
+    /**
+     * Returns default allocated program due date.
+     *
+     * @param stdClass $program
+     * @param int $timeallocated
+     * @param int $timestart
+     * @return int
+     */
+    public static function get_default_timedue(stdClass $program, int $timeallocated, int $timestart): ?int {
+        $duedate = (object)json_decode($program->duedatejson);
+        if ($duedate->type === 'notset') {
+            return null;
+        } else if ($duedate->type === 'date') {
+            return (int)$duedate->date;
+        } else if ($duedate->type === 'delay') {
+            $d = new \DateTime('@' . $timeallocated);
+            $d->add(new \DateInterval($duedate->delay));
+            return $d->getTimestamp();
+        } else {
+            throw new \coding_exception('invalid program due');
+        }
+    }
+
+    /**
+     * Returns default allocated program end date.
+     *
+     * @param stdClass $program
+     * @param int $timeallocated
+     * @param int $timestart
+     * @return int
+     */
+    public static function get_default_timeend(stdClass $program, int $timeallocated, int $timestart): ?int {
+        $enddate = (object)json_decode($program->enddatejson);
+        if ($enddate->type === 'notset') {
+            return null;
+        } else if ($enddate->type === 'date') {
+            return (int)$enddate->date;
+        } else if ($enddate->type === 'delay') {
+            $d = new \DateTime('@' . $timeallocated);
+            $d->add(new \DateInterval($enddate->delay));
+            return $d->getTimestamp();
+        } else {
+            throw new \coding_exception('invalid program end');
+        }
+    }
+
+    /**
+     * Validate program allocation dates.
+     *
+     * @param int $timestart
+     * @param int|null $timedue
+     * @param int|null $timeend
+     * @return array of errors
+     */
+    public static function validate_allocation_dates(int $timestart, ?int $timedue, ?int $timeend): array {
+        $errors = [];
+
+        if (!$timestart) {
+            $errors['timestart'] = get_string('required');
+        }
+
+        if ($timedue && $timedue <= $timestart) {
+            $errors['timedue'] = get_string('error');
+        }
+
+        if ($timeend && $timeend <= $timestart) {
+            $errors['timeend'] = get_string('error');
+        }
+
+        if ($timeend && $timedue && $timedue > $timeend) {
+            $errors['timedue'] = get_string('error');
+        }
+
+        return $errors;
     }
 
     /**
@@ -185,6 +291,7 @@ final class allocation {
         }
         $sql = "SELECT pi.courseid, pi.programid, p.fullname, pg.id
                   FROM {enrol_programs_items} pi
+                  JOIN {course} c ON c.id = pi.courseid    
                   JOIN {enrol_programs_programs} p ON p.id = pi.programid
              LEFT JOIN {enrol_programs_groups} pg ON pg.programid = p.id AND pg.courseid = pi.courseid
              LEFT JOIN {groups} g ON g.id = pg.groupid
@@ -430,7 +537,7 @@ final class allocation {
              LEFT JOIN {enrol_programs_completions} pc ON pc.allocationid = pa.id AND pc.itemid = pi.id
                  WHERE pc.id IS NULL AND cc.reaggregate = 0 AND cc.timecompleted > 0
                        AND p.archived = 0 AND pa.archived = 0
-                       AND (pa.timestart IS NULL OR pa.timestart <= :now1)
+                       AND (pa.timestart <= :now1)
                        AND (pa.timeend IS NULL OR pa.timeend > :now2)
                        $programselect $userselect";
         $DB->execute($sql, $params);
@@ -620,9 +727,10 @@ final class allocation {
             $user = $DB->get_record('user', ['id' => $allocation->userid]);
 
             self::make_snapshot($allocation->id, 'completion');
+            allocation_calendar_event::adjust_allocation_completion_calendar_events($allocation);
             $event = \enrol_programs\event\program_completed::create_from_allocation($allocation, $program);
             $event->trigger();
-            notification::notify_completed($program, $source, $allocation, $user);
+            notification\completion::notify_now($user, $program, $source, $allocation);
         }
         $rs->close();
 
@@ -722,7 +830,7 @@ final class allocation {
         self::fix_allocation_sources($record->programid, $record->userid);
         self::fix_user_enrolments($record->programid, $record->userid);
 
-        notification::trigger_notifications($record->programid, $record->userid);
+        notification_manager::trigger_notifications($record->programid, $record->userid);
 
         return $DB->get_record('enrol_programs_allocations', ['id' => $record->id], '*', MUST_EXIST);
     }
@@ -788,6 +896,7 @@ final class allocation {
         $trans->allow_commit();
 
         self::fix_user_enrolments($allocation->programid, $allocation->userid);
+        allocation_calendar_event::adjust_allocation_completion_calendar_events($allocation);
     }
 
     /**
@@ -928,5 +1037,125 @@ final class allocation {
         $DB->insert_record('enrol_programs_usr_snapshots', $data);
 
         return $allocation;
+    }
+
+    /**
+     * Returns list of programs with allocation data that user can see.
+     * @return array
+     */
+    public static function get_my_allocations(): array {
+        global $USER, $DB;
+
+        $params = ['userid' => $USER->id];
+
+        $tenantjoin = "";
+        if (\enrol_programs\local\tenant::is_active()) {
+            // Having program allocations in different tenant is a BAD thing,
+            // so let's just do the same as the catalogue for now.
+            $tenantid = \tool_olms_tenant\tenancy::get_tenant_id();
+            if ($tenantid) {
+                $tenantjoin = "JOIN {context} pc ON pc.id = p.contextid AND (pc.tenantid IS NULL OR pc.tenantid = :tenantid)";
+                $params['tenantid'] = $tenantid;
+            }
+        }
+
+        $sql = "SELECT pa.*
+                  FROM {enrol_programs_allocations} pa
+                  JOIN {enrol_programs_programs} p ON p.id = pa.programid
+                  $tenantjoin
+                 WHERE pa.userid = :userid AND p.archived = 0 AND pa.archived = 0
+              ORDER BY p.fullname ASC";
+        return $DB->get_records_sql($sql, $params);
+    }
+
+    /**
+     * Called from \tool_uploaduser\process::process_line()
+     * right after manual::tool_uploaduser_process().
+     *
+     * @param stdClass $user
+     * @param string $column
+     * @param \uu_progress_tracker $upt
+     * @return void
+     */
+    public static function tool_uploaduser_process(stdClass $user, string $column, \uu_progress_tracker $upt): void {
+        global $DB;
+
+        if (!preg_match('/^program\d+$/', $column)) {
+            return;
+        }
+        // Offset is 7 to get the number after the word program.
+        $number = substr($column, 7);
+        if (empty($user->{$column})) {
+            return;
+        }
+
+        $programid = $user->{$column};
+        if (is_number($programid)) {
+            $program = $DB->get_record('enrol_programs_programs', ['id' => $programid]);
+        } else {
+            $program = $DB->get_record('enrol_programs_programs', ['idnumber' => $programid]);
+        }
+        if (!$program) {
+            // No need to duplicate errors here,
+            // the manual allocation should have already complained.
+            return;
+        }
+        $programname = format_string($program->fullname);
+
+        $context = \context::instance_by_id($program->contextid, IGNORE_MISSING);
+        if (!$context) {
+            $upt->track('enrolments', get_string('userupload_completion_error', 'enrol_programs', $programname), 'error');
+            return;
+        }
+        if (!has_capability('enrol/programs:manageevidence', $context) && !has_capability('enrol/programs:admin', $context)) {
+            $upt->track('enrolments', get_string('userupload_completion_error', 'enrol_programs', $programname), 'error');
+            return;
+        }
+
+        $completionfield = 'pcompletiondate'.$number;
+        if (empty($user->{$completionfield})) {
+            return;
+        }
+        $timecompleted = strtotime($user->{$completionfield});
+        if ($timecompleted === false) {
+            $upt->track('enrolments', get_string('invalidcompletiondate', 'enrol_programs', $programname), 'error');
+            return;
+        }
+        $completionevidence = 'pcompletionevidence'.$number;
+        $evidence = $user->{$completionevidence} ?? '';
+
+        $allocation = $DB->get_record('enrol_programs_allocations', ['programid' => $program->id, 'userid' => $user->id]);
+        if (!$allocation) {
+            $upt->track('enrolments', get_string('userupload_completion_error', 'enrol_programs', $programname), 'error');
+            return;
+        }
+        if ($program->archived || $allocation->archived) {
+            $upt->track('enrolments', get_string('userupload_completion_error', 'enrol_programs', $programname), 'error');
+            return;
+        }
+        $item = $DB->get_record('enrol_programs_items', ['topitem' => 1, 'programid' => $allocation->programid]);
+        if (!$item) {
+            $upt->track('enrolments', get_string('userupload_completion_error', 'enrol_programs', $programname), 'error');
+            return;
+        }
+
+        $data = [
+            'itemid' => $item->id,
+            'allocationid' => $allocation->id,
+            'timecompleted' => $timecompleted,
+            'evidencetimecompleted' => $timecompleted,
+        ];
+        if (trim($evidence) !== '') {
+            $data['evidencedetails'] = clean_text($evidence);
+        } else {
+            $data['evidencedetails'] = '';
+        }
+        self::update_item_completion((object)$data);
+        $allocation = $DB->get_record('enrol_programs_allocations', ['programid' => $program->id, 'userid' => $user->id], '*', MUST_EXIST);
+        if ($allocation->timecompleted != $timecompleted) {
+            $allocation->timecompleted = $timecompleted;
+            self::update_user($allocation);
+        }
+        $upt->track('enrolments', get_string('userupload_completion_updated', 'enrol_programs', $programname), 'info');
     }
 }

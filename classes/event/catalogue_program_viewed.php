@@ -22,7 +22,7 @@ namespace enrol_programs\event;
  * NOTE: this is learner view in catalogue only, management UI and My program does not trigger this.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -61,7 +61,7 @@ final class catalogue_program_viewed extends \core\event\base {
      * @return string
      */
     public static function get_name() {
-        return get_string('event_catalogue_program_viewed', 'enrol_program');
+        return get_string('event_catalogue_program_viewed', 'enrol_programs');
     }
 
     /**

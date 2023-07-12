@@ -21,8 +21,9 @@ use enrol_programs\local\program;
 /**
  * User deallocated event test.
  *
+ * @group      openlms
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *
@@ -61,9 +62,10 @@ final class event_user_deallocated_test extends \advanced_testcase {
         $events = $sink->get_events();
         $sink->close();
 
-        $this->assertCount(1, $events);
-        $event = reset($events);
+        $this->assertCount(2, $events);
+        $event = $events[1];
         $this->assertInstanceOf('enrol_programs\event\user_deallocated', $event);
+        $this->assertInstanceOf('core\event\calendar_event_deleted', $events[0]);
         $this->assertEquals($syscontext->id, $event->contextid);
         $this->assertSame($allocation->id, $event->objectid);
         $this->assertSame($admin->id, $event->userid);
@@ -71,8 +73,12 @@ final class event_user_deallocated_test extends \advanced_testcase {
         $this->assertSame('c', $event->crud);
         $this->assertSame($event::LEVEL_OTHER, $event->edulevel);
         $this->assertSame('enrol_programs_allocations', $event->objecttable);
+        $this->assertSame('User deallocated from program', $event::get_name());
         $description = $event->get_description();
         $programurl = new \moodle_url('/enrol/programs/management/program.php', ['id' => $program->id]);
         $this->assertSame($programurl->out(false), $event->get_url()->out(false));
+
+        $allocationcalendarevents = $DB->get_records('event', ['instance' => $allocation->id, 'component' => 'enrol_programs', 'userid' => $user->id]);
+        $this->assertCount(0, $allocationcalendarevents);
     }
 }

@@ -20,7 +20,7 @@ namespace enrol_programs\event;
  * Program updated event.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -59,7 +59,7 @@ final class program_updated extends \core\event\base {
      * @return string
      */
     public static function get_name() {
-        return get_string('event_program_updated', 'enrol_program');
+        return get_string('event_program_updated', 'enrol_programs');
     }
 
     /**

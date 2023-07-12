@@ -18,31 +18,15 @@
 
 require_once(__DIR__ . '/../../../../lib/behat/behat_base.php');
 
-use Behat\Mink\Exception\ElementNotFoundException;
-use Behat\Mink\Exception\ExpectationException;
-
 /**
  * Program behat steps.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class behat_enrol_programs extends behat_base {
-    /**
-     * Remove the useless Admin bookmarks block that takes precious screen space in tests.
-     *
-     * @Given Unnecessary Admin bookmarks block gets deleted
-     */
-    public function kill_admin_bookmark() {
-        global $DB;
-        $instances = $DB->get_records('block_instances', ['blockname' => 'admin_bookmarks']);
-        foreach ($instances as $instance) {
-            blocks_delete_instance($instance);
-        }
-    }
-
     /**
      * Opens program management page with all programs.
      *
@@ -90,114 +74,5 @@ class behat_enrol_programs extends behat_base {
     public function i_am_on_my_programs_page() {
         $url = new moodle_url('/enrol/programs/my/index.php');
         $this->execute('behat_general::i_visit', [$url]);
-    }
-
-    /**
-     * Looks for definition of a term in a list.
-     *
-     * @Then I should see :text in the :label definition list item
-     *
-     * @param string $label
-     * @param string $text
-     */
-    public function list_term_contains_text($text, $label) {
-
-        $labelliteral = behat_context_helper::escape($label);
-        $xpath = "//dl/dt[text()=$labelliteral]/following-sibling::dd[1]";
-
-        $nodes = $this->getSession()->getPage()->findAll('xpath', $xpath);
-        if (empty($nodes)) {
-            throw new ExpectationException(
-                'Unable to find a term item with label = ' . $labelliteral,
-                $this->getSession()
-            );
-        }
-        if (count($nodes) > 1) {
-            throw new ExpectationException(
-                'Found more than one term item with label = ' . $labelliteral,
-                $this->getSession()
-            );
-        }
-        $node = reset($nodes);
-
-        $xpathliteral = behat_context_helper::escape($text);
-        $xpath = "/descendant-or-self::*[contains(., $xpathliteral)]" .
-            "[count(descendant::*[contains(., $xpathliteral)]) = 0]";
-
-        // Wait until it finds the text inside the container, otherwise custom exception.
-        try {
-            $nodes = $this->find_all('xpath', $xpath, false, $node);
-        } catch (ElementNotFoundException $e) {
-            throw new ExpectationException('"' . $text . '" text was not found in the "' . $label . '" term', $this->getSession());
-        }
-
-        // If we are not running javascript we have enough with the
-        // element existing as we can't check if it is visible.
-        if (!$this->running_javascript()) {
-            return;
-        }
-
-        // We also check the element visibility when running JS tests. Using microsleep as this
-        // is a repeated step and global performance is important.
-        $this->spin(
-            function($context, $args) {
-
-                foreach ($args['nodes'] as $node) {
-                    if ($node->isVisible()) {
-                        return true;
-                    }
-                }
-
-                throw new ExpectationException('"' . $args['text'] . '" text was found in the "' . $args['label'] . '" element but was not visible', $context->getSession());
-            },
-            array('nodes' => $nodes, 'text' => $text, 'label' => $label),
-            false,
-            false,
-            true
-        );
-    }
-
-    /**
-     * Looks into definition of a term in a list and makes sure text is not there.
-     *
-     * @Then I should not see :text in the :label definition list item
-     *
-     * @param string $label
-     * @param string $text
-     */
-    public function list_term_note_contains_text($text, $label) {
-
-        $labelliteral = behat_context_helper::escape($label);
-        $xpath = "//dl/dt[text()=$labelliteral]/following-sibling::dd[1]";
-
-        $nodes = $this->getSession()->getPage()->findAll('xpath', $xpath);
-        if (empty($nodes)) {
-            throw new ExpectationException(
-                'Unable to find a term item with label = ' . $labelliteral,
-                $this->getSession()
-            );
-        }
-        if (count($nodes) > 1) {
-            throw new ExpectationException(
-                'Found more than one term item with label = ' . $labelliteral,
-                $this->getSession()
-            );
-        }
-        $node = reset($nodes);
-
-        $xpathliteral = behat_context_helper::escape($text);
-        $xpath = "/descendant-or-self::*[contains(., $xpathliteral)]" .
-            "[count(descendant::*[contains(., $xpathliteral)]) = 0]";
-
-        $nodes = null;
-        try {
-            $nodes = $this->find_all('xpath', $xpath, false, $node);
-        } catch (ElementNotFoundException $e) {
-            // Good!
-            $nodes = null;
-        }
-        if ($nodes) {
-            throw new ExpectationException('"' . $text . '" text was found in the "' . $label . '" element', $this->getSession());
-        }
     }
 }

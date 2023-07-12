@@ -22,7 +22,7 @@ use stdClass;
  * Program self allocation source.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -174,7 +174,7 @@ final class selfallocation extends base {
         $allocation = self::allocate_user($program, $source, $user->id, []);
 
         \enrol_programs\local\allocation::fix_user_enrolments($program->id, $user->id);
-        \enrol_programs\local\notification::trigger_notifications($program->id, $user->id);
+        \enrol_programs\local\notification_manager::trigger_notifications($program->id, $user->id);
 
         return $allocation;
     }

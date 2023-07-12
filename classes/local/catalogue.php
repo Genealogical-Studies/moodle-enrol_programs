@@ -20,7 +20,7 @@ namespace enrol_programs\local;
  * Program catalogue for learners.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -289,9 +289,19 @@ EOT;
             $params['searchtext'] = '%' . $DB->sql_like_escape($this->searchtext) . '%';
         }
 
+        $tenantjoin = "";
+        if (tenant::is_active()) {
+            $tenantid = \tool_olms_tenant\tenancy::get_tenant_id();
+            if ($tenantid) {
+                $tenantjoin = "JOIN {context} pc ON pc.id = p.contextid AND (pc.tenantid IS NULL OR pc.tenantid = :tenantid)";
+                $params['tenantid'] = $tenantid;
+            }
+        }
+
         $sql = "SELECT p.*
                   FROM {enrol_programs_programs} p
              LEFT JOIN {enrol_programs_allocations} pa ON pa.programid = p.id AND pa.userid = :userid1 AND pa.archived = 0
+                  $tenantjoin
                  WHERE p.archived = 0 $searchwhere
                        AND (p.\"public\" = 1 OR pa.id IS NOT NULL OR EXISTS (
                             SELECT cm.id
@@ -323,6 +333,22 @@ EOT;
         if ($program->archived) {
             return false;
         }
+
+        if (\enrol_programs\local\tenant::is_active()) {
+            if ($userid == $USER->id) {
+                $tenantid = \tool_olms_tenant\tenancy::get_tenant_id();
+            } else {
+                $tenantid = \tool_olms_tenant\tenant_users::get_user_tenant_id($userid);
+            }
+            if ($tenantid) {
+                $programcontext = \context::instance_by_id($program->contextid);
+                $programtenantid = \tool_olms_tenant\tenants::get_context_tenant_id($programcontext);
+                if ($programtenantid && $programtenantid != $tenantid) {
+                    return false;
+                }
+            }
+        }
+
         if ($program->public) {
             return true;
         }
@@ -386,8 +412,8 @@ EOT;
                        AND (p.\"public\" = 1 OR pa.id IS NOT NULL OR EXISTS (
                             SELECT cm.id
                               FROM {cohort_members} cm
-                              JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid AND pc.programid = p.id
-                             WHERE cm.userid = :userid2))
+                              JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid
+                             WHERE cm.userid = :userid2 AND pc.programid = p.id))
               ORDER BY t.name ASC";
         $params = ['userid1' => $userid, 'userid2' => $userid];
 
@@ -420,8 +446,8 @@ EOT;
                        AND (p.\"public\" = 1 OR pa.id IS NOT NULL OR EXISTS (
                              SELECT cm.id
                                FROM {cohort_members} cm
-                               JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid AND pc.programid = p.id
-                              WHERE cm.userid = :userid2))
+                               JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid
+                              WHERE cm.userid = :userid2 AND pc.programid = p.id))
               ORDER BY p.fullname";
         $countsql = util::convert_to_count_sql($sql);
         $params = ['tagid' => $tagid, 'userid1' => $USER->id, 'userid2' => $USER->id];

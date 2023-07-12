@@ -18,7 +18,7 @@
  * Program management interface.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -49,7 +49,7 @@ $source = $DB->get_record('enrol_programs_sources', ['programid' => $program->id
 $context = context::instance_by_id($program->contextid);
 require_capability('enrol/programs:edit', $context);
 
-$currenturl = new moodle_url('/enrol/programs/management/source_edit.php', ['id' => $program->id]);
+$currenturl = new moodle_url('/enrol/programs/management/program_source_edit.php', ['id' => $program->id]);
 $returnurl = new moodle_url('/enrol/programs/management/program_allocation.php', ['id' => $program->id]);
 
 /** @var \enrol_programs\local\source\base[] $sourceclasses */
@@ -62,18 +62,21 @@ $sourceclass = $sourceclasses[$type];
 management::setup_program_page($currenturl, $context, $program);
 
 if ($source) {
+    if (!$sourceclass::is_update_allowed($program)) {
+        redirect($returnurl);
+    }
     $source->enable = 1;
     $source->hasallocations = $DB->record_exists('enrol_programs_allocations', ['sourceid' => $source->id]);
 } else {
+    if (!$sourceclass::is_new_allowed($program)) {
+        redirect($returnurl);
+    }
     $source = new stdClass();
     $source->id = null;
     $source->type = $type;
     $source->programid = $program->id;
     $source->enable = 0;
     $source->hasallocations = false;
-    if (!$sourceclass::is_new_allowed()) {
-        redirect($returnurl);
-    }
 }
 $source = $sourceclass::decode_datajson($source);
 
@@ -93,7 +96,6 @@ if ($data = $form->get_data()) {
 $managementoutput = $PAGE->get_renderer('enrol_programs', 'management');
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($program->fullname));
 
 echo $managementoutput->render_management_program_tabs($program, 'allocation');
 

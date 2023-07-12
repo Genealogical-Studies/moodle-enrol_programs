@@ -1,8 +1,8 @@
-@enrol @enrol_programs @olms
+@enrol @enrol_programs @openlms
 Feature: Program completion by students tests
 
   Background:
-    Given Unnecessary Admin bookmarks block gets deleted
+    Given unnecessary Admin bookmarks block gets deleted
     And the following "categories" exist:
       | name  | category | idnumber |
       | Cat 1 | 0        | CAT1     |
@@ -148,4 +148,3 @@ Feature: Program completion by students tests
     And I am on My programs page
     And I follow "Program 000"
     Then I should see "Completed" in the "Program status:" definition list item
-

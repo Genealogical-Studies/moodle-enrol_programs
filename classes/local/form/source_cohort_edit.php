@@ -18,17 +18,19 @@ namespace enrol_programs\local\form;
 
 use enrol_programs\local\program;
 use enrol_programs\local\allocation;
+use enrol_programs\local\source\cohort;
 
 /**
  * Edit cohort allocation settings.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class source_cohort_edit extends \local_openlms\dialog_form {
     protected function definition() {
+        global $DB;
         $mform = $this->_form;
         $context = $this->_customdata['context'];
         $source = $this->_customdata['source'];
@@ -39,6 +41,21 @@ final class source_cohort_edit extends \local_openlms\dialog_form {
         if ($source->hasallocations) {
             $mform->hardFreeze('enable');
         }
+
+        $options = ['contextid' => $context->id, 'multiple' => true];
+        /** @var \MoodleQuickForm_cohort $cohortsel */
+        $cohortsel = $mform->addElement('cohort', 'cohorts', get_string('source_cohort_cohortstoallocate',
+            'enrol_programs'), $options);
+        // WARNING: The cohort element is not great at all, work around the current value problems here in a very hacky way.
+        if (!empty($source->id)) {
+            $cohorts = cohort::fetch_allocation_cohorts_menu($source->id);
+            $cohorts = array_map('format_string', $cohorts);
+            foreach ($cohorts as $cid => $cname) {
+                $cohortsel->addOption($cname, $cid);
+            }
+            $cohortsel->setSelected(array_keys($cohorts));
+        }
+        $mform->hideIf('cohorts', 'enable', 'eq', 0);
 
         $mform->addElement('hidden', 'programid');
         $mform->setType('programid', PARAM_INT);

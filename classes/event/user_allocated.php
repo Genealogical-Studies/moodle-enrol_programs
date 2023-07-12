@@ -20,7 +20,7 @@ namespace enrol_programs\event;
  * User allocated event.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -63,7 +63,7 @@ final class user_allocated extends \core\event\base {
      * @return string
      */
     public static function get_name() {
-        return get_string('event_user_allocated', 'enrol_program');
+        return get_string('event_user_allocated', 'enrol_programs');
     }
 
     /**

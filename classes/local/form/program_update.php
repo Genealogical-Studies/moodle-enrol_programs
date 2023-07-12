@@ -20,7 +20,7 @@ namespace enrol_programs\local\form;
  * Update program.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -87,7 +87,7 @@ final class program_update extends \local_openlms\dialog_form {
             if ($olddata->idnumber !== $data['idnumber']) {
                 $select = 'idnumber = :idnumber AND id <> :id';
                 $params = ['idnumber' => $data['idnumber'], 'id' => $olddata->id];
-                if ($DB->record_exists_select('cohort', $select, $params)) {
+                if ($DB->record_exists_select('enrol_programs_programs', $select, $params)) {
                     $errors['idnumber'] = get_string('error');
                 }
             }

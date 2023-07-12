@@ -23,8 +23,9 @@ use enrol_programs\local\program;
 /**
  * Manual allocation source test.
  *
+ * @group      openlms
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *
@@ -40,9 +41,13 @@ final class local_source_selfallocation_test extends \advanced_testcase {
     }
 
     public function test_is_new_alloved() {
-        $this->assertTrue(selfallocation::is_new_allowed());
+        /** @var \enrol_programs_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('enrol_programs');
+        $program = $generator->create_program();
+
+        $this->assertTrue(selfallocation::is_new_allowed($program));
         set_config('source_selfallocation_allownew', 0, 'enrol_programs');
-        $this->assertFalse(selfallocation::is_new_allowed());
+        $this->assertFalse(selfallocation::is_new_allowed($program));
     }
 
     public function test_can_user_request() {
@@ -184,52 +189,5 @@ final class local_source_selfallocation_test extends \advanced_testcase {
 
         $allocation2 = selfallocation::signup($program1->id, $source1a->id);
         $this->assertEquals($allocation, $allocation2);
-    }
-
-    public function test_notify_allocation() {
-        global $DB;
-
-        /** @var \enrol_programs_generator $generator */
-        $generator = $this->getDataGenerator()->get_plugin_generator('enrol_programs');
-
-        $guest = guest_user();
-        $admin = get_admin();
-        $user1 = $this->getDataGenerator()->create_user();
-        $user2 = $this->getDataGenerator()->create_user();
-        $user3 = $this->getDataGenerator()->create_user();
-
-        $program1 = $generator->create_program(['sources' => ['selfallocation' => []]]);
-        $source1 = $DB->get_record('enrol_programs_sources', ['programid' => $program1->id, 'type' => 'selfallocation'], '*', MUST_EXIST);
-
-        $program2 = $generator->create_program(['sources' => ['selfallocation' => []]]);
-        $source2 = $DB->get_record('enrol_programs_sources', ['programid' => $program2->id, 'type' => 'selfallocation'], '*', MUST_EXIST);
-
-        $sink = $this->redirectMessages();
-        $this->setUser($user1);
-        selfallocation::signup($program1->id, $source1->id);
-        $messages = $sink->get_messages();
-        $sink->close();
-        $this->assertCount(0, $messages);
-        $allocation = $DB->get_record('enrol_programs_allocations', ['programid' => $program1->id, 'userid' => $user1->id], '*', MUST_EXIST);
-        $this->assertNull($allocation->timenotifiedallocation);
-
-        $program1 = program::update_program_notifications((object)[
-            'id' => $program1->id,
-            'allocation_selfallocation' => 1,
-        ], false);
-        $sink = $this->redirectMessages();
-        $this->setCurrentTimeStart();
-        $this->setUser($user2);
-        selfallocation::signup($program1->id, $source1->id);
-        $messages = $sink->get_messages();
-        $sink->close();
-        $this->assertCount(1, $messages);
-        $allocation = $DB->get_record('enrol_programs_allocations', ['programid' => $program1->id, 'userid' => $user2->id], '*', MUST_EXIST);
-        $this->assertTimeCurrent($allocation->timenotifiedallocation);
-        $message = $messages[0];
-        $this->assertSame('Program allocation notification', $message->subject);
-        $this->assertStringContainsString('you have signed up for program', $message->fullmessage);
-        $this->assertSame($user2->id, $message->useridto);
-        $this->assertSame($admin->id, $message->useridfrom);
     }
 }

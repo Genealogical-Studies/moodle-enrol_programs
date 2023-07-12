@@ -21,8 +21,9 @@ use enrol_programs\local\program;
 /**
  * Program viewed event test.
  *
+ * @group      openlms
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *
@@ -54,6 +55,7 @@ final class event_program_viewed_test extends \advanced_testcase {
         $this->assertSame('r', $event->crud);
         $this->assertSame($event::LEVEL_OTHER, $event->edulevel);
         $this->assertSame('enrol_programs_programs', $event->objecttable);
+        $this->assertSame('Program viewed', $event::get_name());
         $description = $event->get_description();
         $programurl = new \moodle_url('/enrol/programs/catalogue/program.php', ['id' => $program->id]);
         $this->assertSame($programurl->out(false), $event->get_url()->out(false));

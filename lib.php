@@ -18,7 +18,7 @@
  * Program enrolment plugin lib functions and enrol class.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -27,7 +27,7 @@
  * Program enrolment plugin class.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  */
 class enrol_programs_plugin extends enrol_plugin {
@@ -155,6 +155,37 @@ function enrol_programs_pluginfile($course, $cm, $context, $filearea, $args, $fo
  */
 function enrol_programs_pre_course_category_delete(\stdClass $category) {
     \enrol_programs\local\program::pre_course_category_delete($category);
+}
+
+/**
+ * This function receives a calendar event and returns the action associated with it, or null if there is none.
+ *
+ * This is used by block_myoverview in order to display the event appropriately. If null is returned then the event
+ * is not displayed on the block.
+ *
+ * @param calendar_event $event
+ * @param \core_calendar\action_factory $factory
+ * @param int $userid ID override for calendar events
+ * @return \core_calendar\local\event\entities\action_interface|null
+ */
+function enrol_programs_core_calendar_provide_event_action(calendar_event $event,
+        \core_calendar\action_factory $factory, $userid = 0) {
+
+    global $USER, $DB;
+    if (empty($userid)) {
+        $userid = $USER->id;
+    }
+
+    // The event object (core_calendar\local\event\entities\event) passed does not include an instance property so we need to pull the DB record.
+    $event = $DB->get_record('event', ['id' => $event->id], '*', MUST_EXIST);
+    $allocation = $DB->get_record('enrol_programs_allocations', ['id' => $event->instance], '*', MUST_EXIST);
+
+    return $factory->create_instance(
+        get_string('view'),
+        new \moodle_url('/enrol/programs/view.php', ['id' => $allocation->programid]),
+        1,
+        true
+    );
 }
 
 /**

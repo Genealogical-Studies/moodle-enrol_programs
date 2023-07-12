@@ -20,7 +20,7 @@ namespace enrol_programs\local\form;
  * Delete user allocation.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -33,7 +33,7 @@ final class user_allocation_delete extends \local_openlms\dialog_form {
 
         $mform->addElement('static', 'userfullname', get_string('user'), fullname($user));
 
-        $mform->addElement('date_time_selector', 'timeallocated', get_string('allocationdate', 'enrol_programs'), ['optional = false']);
+        $mform->addElement('date_time_selector', 'timeallocated', get_string('allocationdate', 'enrol_programs'), ['optional' => false]);
         $mform->freeze('timeallocated');
 
         $mform->addElement('date_time_selector', 'timestart', get_string('programstart_date', 'enrol_programs'), ['optional' => false]);

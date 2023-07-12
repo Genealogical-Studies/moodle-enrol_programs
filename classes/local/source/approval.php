@@ -23,7 +23,7 @@ use stdClass;
  * Program allocation with approval source.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -182,6 +182,7 @@ final class approval extends base {
         $source->approval_allowrequest = 1;
 
         if (isset($source->datajson)) {
+            $data = (object)json_decode($source->datajson);
             if (isset($data->allowrequest)) {
                 $source->approval_allowrequest = (int)(bool)$data->allowrequest;
             }
@@ -303,7 +304,7 @@ final class approval extends base {
         $trans->allow_commit();
 
         \enrol_programs\local\allocation::fix_user_enrolments($program->id, $user->id);
-        \enrol_programs\local\notification::trigger_notifications($program->id, $user->id);
+        \enrol_programs\local\notification_manager::trigger_notifications($program->id, $user->id);
 
         return $allocation;
     }

@@ -1,8 +1,8 @@
-@enrol @enrol_programs @olms
+@enrol @enrol_programs @openlms
 Feature: Program selfallocation tests
 
   Background:
-    Given Unnecessary Admin bookmarks block gets deleted
+    Given unnecessary Admin bookmarks block gets deleted
     And the following "categories" exist:
       | name  | category | idnumber |
       | Cat 1 | 0        | CAT1     |
@@ -174,4 +174,3 @@ Feature: Program selfallocation tests
     And I am on Program catalogue page
     And I follow "Program 001"
     Then I should see "Maximum number of users self-allocated already"
-

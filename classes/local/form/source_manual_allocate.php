@@ -20,44 +20,22 @@ namespace enrol_programs\local\form;
  * Allocate users and cohorts manually.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class source_manual_allocate extends \local_openlms\dialog_form {
+    /** @var array $arguments for WS call to get candidate users */
+    protected $arguments;
     protected function definition() {
         $mform = $this->_form;
         $program = $this->_customdata['program'];
         $source = $this->_customdata['source'];
         $context = $this->_customdata['context'];
 
-        $attributes = [
-            'multiple' => true,
-            'ajax' => 'enrol_programs/form_candidate_selector',
-            'valuehtmlcallback' => function($userid) {
-                global $OUTPUT;
-
-                $context = \context_system::instance();
-                $fields = \core_user\fields::for_name()->with_identity($context, false);
-                $record = \core_user::get_user($userid, 'id' . $fields->get_sql()->selects, MUST_EXIST);
-
-                $user = (object) [
-                    'id' => $record->id,
-                    'fullname' => fullname($record, has_capability('moodle/site:viewfullnames', $context)),
-                    'extrafields' => [],
-                ];
-
-                foreach ($fields->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]) as $extrafield) {
-                    $user->extrafields[] = (object) [
-                        'name' => $extrafield,
-                        'value' => s($record->$extrafield),
-                    ];
-                }
-
-                return $OUTPUT->render_from_template('core_user/form_user_selector_suggestion', $user);
-            },
-        ];
-        $mform->addElement('autocomplete', 'users', get_string('users'), [], $attributes);
+        $this->arguments = ['programid' => $program->id];
+        \enrol_programs\external\form_source_manual_allocate_users::add_form_element(
+            $mform, $this->arguments, 'users', get_string('users'));
 
         $options = ['contextid' => $context->id, 'multiple' => false];
         $mform->addElement('cohort', 'cohortid', get_string('cohort', 'cohort'), $options);
@@ -78,21 +56,33 @@ final class source_manual_allocate extends \local_openlms\dialog_form {
 
         $errors = parent::validation($data, $files);
 
+        $context = $this->_customdata['context'];
+
         if ($data['cohortid']) {
-            $cohort = $DB->get_record('cohort', array('id' => $data['cohortid']), 'id, contextid, visible');
-            if (!$cohort->visible) {
-                $cohortcontext = \context::instance_by_id($cohort->contextid);
-                if (!has_capability('moodle/cohort:view', $cohortcontext)) {
-                    $errors['cohortid'] = get_string('error');
+            $cohort = $DB->get_record('cohort', ['id' => $data['cohortid']], '*', MUST_EXIST);
+            $cohortcontext = \context::instance_by_id($cohort->contextid);
+            if (!$cohort->visible && !has_capability('moodle/cohort:view', $cohortcontext)) {
+                $errors['cohortid'] = get_string('error');
+            }
+            if (\enrol_programs\local\tenant::is_active()) {
+                $tenantid = \tool_olms_tenant\tenants::get_context_tenant_id($context);
+                if ($tenantid) {
+                    $cohorttenantid = \tool_olms_tenant\tenants::get_context_tenant_id($cohortcontext);
+                    if ($cohorttenantid && $cohorttenantid != $tenantid) {
+                        $errors['cohortid'] = get_string('error');
+                    }
                 }
             }
-            // NOTE: Later add tenant access restrictions if cohort visible.
         }
 
         if ($data['users']) {
             foreach ($data['users'] as $userid) {
-                $user = $DB->get_record('user', ['id' => $userid, 'deleted' => 0, 'confirmed' => 1], '*', MUST_EXIST);
-                // NOTE: Later add tenant access restrictions here.
+                $error = \enrol_programs\external\form_source_manual_allocate_users::validate_form_value(
+                    $this->arguments, $userid, $context);
+                if ($error !== null) {
+                    $errors['users'] = $error;
+                    break;
+                }
             }
         }
 

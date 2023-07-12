@@ -18,7 +18,7 @@
  * Program enrolment uninstallation.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c] 2022 Open LMS (https://www.openlms.net/]
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -34,6 +34,7 @@ function xmldb_enrol_programs_uninstall() {
     $DB->delete_records('enrol_programs_completions', []);
     $DB->delete_records('enrol_programs_allocations', []);
     $DB->delete_records('enrol_programs_requests', []);
+    $DB->delete_records('enrol_programs_src_cohorts', []);
     $DB->delete_records('enrol_programs_sources', []);
     $DB->delete_records('enrol_programs_cohorts', []);
     $DB->delete_records('enrol_programs_prerequisites', []);

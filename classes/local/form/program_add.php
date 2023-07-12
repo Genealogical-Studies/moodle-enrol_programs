@@ -20,7 +20,7 @@ namespace enrol_programs\local\form;
  * Add program.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -75,7 +75,7 @@ final class program_add extends \local_openlms\dialog_form {
         } else if (trim($data['idnumber']) !== $data['idnumber']) {
             $errors['idnumber'] = get_string('error');
         } else {
-            if ($DB->record_exists('cohort', array('idnumber' => $data['idnumber']))) {
+            if ($DB->record_exists('enrol_programs_programs', array('idnumber' => $data['idnumber']))) {
                 $errors['idnumber'] = get_string('error');
             }
         }

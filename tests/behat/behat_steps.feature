@@ -1,8 +1,8 @@
-@enrol @enrol_programs @olms
+@enrol @enrol_programs @openlms
 Feature: Programs navigation behat steps test
 
   Background:
-    Given Unnecessary Admin bookmarks block gets deleted
+    Given unnecessary Admin bookmarks block gets deleted
     And the following "categories" exist:
       | name  | category | idnumber |
       | Cat 1 | 0        | CAT1     |
@@ -69,7 +69,7 @@ Feature: Programs navigation behat steps test
   Scenario: Admin navigates to programs the normal way
     Given I log in as "admin"
 
-    When I navigate to "Site administration > Programs > Program management" in site administration
+    When I navigate to "Programs > Program management" in site administration
     Then I should see "Program management"
     And I should see "Program 000"
     And I should see "Program 001"
@@ -125,7 +125,7 @@ Feature: Programs navigation behat steps test
   Scenario: Full manager navigates to programs the normal way
     Given I log in as "admin"
 
-    When I navigate to "Site administration > Programs > Program management" in site administration
+    When I navigate to "Programs > Program management" in site administration
     Then I should see "Program management"
     And I should see "Program 000"
     And I should see "Program 001"
@@ -169,9 +169,14 @@ Feature: Programs navigation behat steps test
 
   @javascript
   Scenario: Category manager navigates to programs the normal way
-    Given I log in as "manager2"
+    Given I skip tests if "local_navmenu" is not installed
+    And the following "local_navmenu > items" exist:
+      | itemtype                  |
+      | enrol_programs_catalogue  |
+      | enrol_programs_myprograms |
+    And I log in as "manager2"
 
-    When I select "Program catalogue" from flat navigation drawer
+    When I select "Program catalogue" from primary navigation
     And I follow "Program management"
     Then I should see "Program management"
     And I should not see "Program 000"
@@ -205,9 +210,14 @@ Feature: Programs navigation behat steps test
 
   @javascript
   Scenario: Full viewer navigates to programs the normal way
-    Given I log in as "viewer1"
+    Given I skip tests if "local_navmenu" is not installed
+    And the following "local_navmenu > items" exist:
+      | itemtype                  |
+      | enrol_programs_catalogue  |
+      | enrol_programs_myprograms |
+    And I log in as "viewer1"
 
-    When I select "Program catalogue" from flat navigation drawer
+    When I select "Program catalogue" from primary navigation
     And I follow "Program management"
     Then I should see "Program management"
     And I should see "Program 000"
@@ -249,9 +259,14 @@ Feature: Programs navigation behat steps test
 
   @javascript
   Scenario: Category viewer navigates to programs the normal way
-    Given I log in as "manager2"
+    Given I skip tests if "local_navmenu" is not installed
+    And the following "local_navmenu > items" exist:
+      | itemtype                  |
+      | enrol_programs_catalogue  |
+      | enrol_programs_myprograms |
+    And I log in as "manager2"
 
-    When I select "Program catalogue" from flat navigation drawer
+    When I select "Program catalogue" from primary navigation
     And I follow "Program management"
     Then I should see "Program management"
     And I should not see "Program 000"
@@ -263,17 +278,22 @@ Feature: Programs navigation behat steps test
     Given I log in as "student1"
 
     When I am on Program catalogue page
-      Then I should see "Program catalogue"
-      And I should see "Program 001"
-      And I should not see "Program 000"
-      And I should not see "Program 002"
-      And I should not see "Program 003"
+    Then I should see "Program catalogue"
+    And I should see "Program 001"
+    And I should not see "Program 000"
+    And I should not see "Program 002"
+    And I should not see "Program 003"
 
   @javascript
   Scenario: Student navigates to Program catalogue the normal way
-    Given I log in as "student1"
+    Given I skip tests if "local_navmenu" is not installed
+    And the following "local_navmenu > items" exist:
+      | itemtype                  |
+      | enrol_programs_catalogue  |
+      | enrol_programs_myprograms |
+    And I log in as "student1"
 
-    When I select "Program catalogue" from flat navigation drawer
+    When I select "Program catalogue" from primary navigation
     Then I should see "Program catalogue"
     And I should see "Program 001"
     And I should not see "Program 000"
@@ -289,27 +309,13 @@ Feature: Programs navigation behat steps test
 
   @javascript
   Scenario: Student navigates to My programs the normal way
-    Given I log in as "student1"
+    Given I skip tests if "local_navmenu" is not installed
+    And the following "local_navmenu > items" exist:
+      | itemtype                  |
+      | enrol_programs_catalogue  |
+      | enrol_programs_myprograms |
+    And I log in as "student1"
 
-    When I select "My programs" from flat navigation drawer
+    When I select "My programs" from primary navigation
     Then I should see "My programs"
     And I should see "You are not allocated to any programs."
-
-  Scenario: List term definition assertion works
-    Given I log in as "manager1"
-    And I am on all programs management page
-    When I follow "Program 000"
-    Then I should see "Program 000" in the "Full name:" definition list item
-    And I should see "Program" in the "Full name:" definition list item
-    And I should see "P" in the "Full name:" definition list item
-    And I should see "rog" in the "Full name:" definition list item
-  # Uncomment following to test a failure.
-    #And I should see "program 000" in the "Full name:" definition list item
-
-  Scenario: List term definition negative assertion works
-    Given I log in as "manager1"
-    And I am on all programs management page
-    When I follow "Program 000"
-    Then I should not see "program" in the "Full name:" definition list item
-  # Uncomment following to test a failure.
-    #And I should not see "Program" in the "Full name:" definition list item

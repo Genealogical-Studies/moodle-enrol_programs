@@ -20,17 +20,57 @@ defined('MOODLE_INTERNAL') || die();
  * Program enrolment external functions.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c] 2022 Open LMS (https://www.openlms.net/]
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 $functions = [
-    'enrol_programs_search_candidate' => [
-        'classname' => 'enrol_programs\external\search_candidate',
-        'description' => 'Return list of candidates for program allocation.',
+    'enrol_programs_form_source_manual_allocate_users' => [
+        'classname' => enrol_programs\external\form_source_manual_allocate_users::class,
+        'description' => 'Return list of user candidates for program allocation.',
         'type' => 'read',
         'ajax' => true,
         'loginrequired' => true,
+    ],
+    'enrol_programs_get_programs' => [
+        'classname' => enrol_programs\external\get_programs::class,
+        'description' => 'Return list of programs that match the search parameters.',
+        'type' => 'read',
+    ],
+    'enrol_programs_get_program_allocations' => [
+        'classname' => enrol_programs\external\get_program_allocations::class,
+        'description' => 'Return list of program allocations for given programid and optional userids.',
+        'type' => 'read',
+    ],
+    'enrol_programs_source_manual_allocate_users' => [
+        'classname' => enrol_programs\external\source_manual_allocate_users::class,
+        'description' => 'Allocates users or cohorts to the program.',
+        'type' => 'write',
+    ],
+    'enrol_programs_delete_program_allocations' => [
+        'classname' => enrol_programs\external\delete_program_allocations::class,
+        'description' => 'Deallocates users from the program.',
+        'type' => 'write',
+    ],
+    'enrol_programs_update_program_allocation' => [
+        'classname' => enrol_programs\external\update_program_allocation::class,
+        'description' => 'Updates the allocation for the user and the program.',
+        'type' => 'write',
+    ],
+    'enrol_programs_source_cohort_get_cohorts' => [
+        'classname' => enrol_programs\external\source_cohort_get_cohorts::class,
+        'description' => 'Gets list of cohort that are synced with the program cohort allocation.',
+        'type' => 'read',
+    ],
+    'enrol_programs_source_cohort_add_cohort' => [
+        'classname' => enrol_programs\external\source_cohort_add_cohort::class,
+        'description' => 'Add cohort to the list of synchronised cohorts of one program.',
+        'type' => 'write',
+    ],
+    'enrol_programs_source_cohort_delete_cohort' => [
+        'classname' => enrol_programs\external\source_cohort_delete_cohort::class,
+        'description' => 'Removes a cohort from the list of synchronised cohorts of one program.',
+        'type' => 'write',
     ],
 ];

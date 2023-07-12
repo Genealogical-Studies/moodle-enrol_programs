@@ -1,8 +1,8 @@
-@enrol @enrol_programs @olms
+@enrol @enrol_programs @openlms
 Feature: General program management tests
 
   Background:
-    Given Unnecessary Admin bookmarks block gets deleted
+    Given unnecessary Admin bookmarks block gets deleted
     And the following "categories" exist:
       | name  | category | idnumber |
       | Cat 1 | 0        | CAT1     |
@@ -131,7 +131,6 @@ Feature: General program management tests
     And I set the following fields to these values:
       | Program name  | Program 002 |
       | ID number     | PR02        |
-    And I open the autocomplete suggestions list in the "Context" "fieldset"
     And I set the field "Context" to "Cat 1"
     And I set the field "Tags" to "Logic"
     And I press dialog form button "Add program"

@@ -22,8 +22,9 @@ use enrol_programs\local\source\manual;
 /**
  * Details tests for creation of program groups.
  *
+ * @group      openlms
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *
@@ -195,5 +196,11 @@ final class groups_test extends \advanced_testcase {
         $groups = array_values($groups);
         $this->assertSame($program1->fullname, $groups[0]->name);
         $this->assertSame($course2->id, $groups[0]->courseid);
+
+        $program3 = program::update_program_general((object)['id' => $program3->id, 'creategroups' => 0]);
+        $this->assertCount(0, $DB->get_records('groups', ['name' => $program3->fullname, 'courseid' => $course1->id]));
+        delete_course($course1, false);
+        $program3 = program::update_program_general((object)['id' => $program3->id, 'creategroups' => 1]);
+        program::delete_program($program3->id);
     }
 }

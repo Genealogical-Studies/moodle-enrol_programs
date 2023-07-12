@@ -18,7 +18,7 @@
  * Program management interface.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -70,7 +70,6 @@ if ($data = $form->get_data()) {
 $managementoutput = $PAGE->get_renderer('enrol_programs', 'management');
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($program->fullname));
 
 echo $managementoutput->render_management_program_tabs($program, 'allocation');
 

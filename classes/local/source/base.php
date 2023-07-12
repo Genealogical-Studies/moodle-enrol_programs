@@ -16,13 +16,15 @@
 
 namespace enrol_programs\local\source;
 
+use enrol_programs\local\allocation;
+
 use stdClass;
 
 /**
  * Program source abstraction.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -54,11 +56,25 @@ abstract class base {
      * NOTE: Existing enabled sources in programs cannot be deleted/hidden
      * if there are any allocated users to program.
      *
+     * @param stdClass $program
      * @return bool
      */
-    public static function is_new_allowed(): bool {
+    public static function is_new_allowed(\stdClass $program): bool {
         $type = static::get_type();
         return (bool)get_config('enrol_programs', 'source_' . $type . '_allownew');
+    }
+
+    /**
+     * Can existing source of this type be updated or deleted to programs?
+     *
+     * NOTE: Existing enabled sources in programs cannot be deleted/hidden
+     * if there are any allocated users to program.
+     *
+     * @param stdClass $program
+     * @return bool
+     */
+    public static function is_update_allowed(stdClass $program): bool {
+        return true;
     }
 
     /**
@@ -134,6 +150,29 @@ abstract class base {
     }
 
     /**
+     * Are the date overrides valid for a new program allocation in near future?
+     *
+     * NOTE: This is intended for validation of external date such as upload of allocations.
+     *
+     * @param stdClass $program
+     * @param array $dateoverrides
+     * @return bool
+     */
+    final public static function is_valid_dateoverrides(stdClass $program, array $dateoverrides): bool {
+        $timeallocated = time();
+
+        $timestart = empty($dateoverrides['timestart']) ?
+            allocation::get_default_timestart($program, $timeallocated) : $dateoverrides['timestart'];
+        $timedue = empty($dateoverrides['timedue']) ?
+            allocation::get_default_timedue($program, $timeallocated, $timestart) : $dateoverrides['timedue'];
+        $timeend = empty($dateoverrides['timeend']) ?
+            allocation::get_default_timeend($program, $timeallocated, $timestart) : $dateoverrides['timeend'];
+
+        $errors = allocation::validate_allocation_dates($timestart, $timedue, $timeend);
+        return empty($errors);
+    }
+
+    /**
      * Allocate user to program.
      *
      * @param stdClass $program
@@ -141,9 +180,10 @@ abstract class base {
      * @param int $userid
      * @param array $sourcedata
      * @param array $dateoverrides
+     * @param int|null $sourceinstanceid
      * @return stdClass user allocation record
      */
-    final protected static function allocate_user(\stdClass $program, \stdClass $source, int $userid, array $sourcedata, array $dateoverrides = []): \stdClass {
+    final protected static function allocate_user(\stdClass $program, \stdClass $source, int $userid, array $sourcedata, array $dateoverrides = [], ?int $sourceinstanceid = null): \stdClass {
         global $DB;
 
         if ($userid <= 0 || isguestuser($userid)) {
@@ -160,64 +200,38 @@ abstract class base {
         $record->sourceid = $source->id;
         $record->archived = 0;
         $record->sourcedatajson = \enrol_programs\local\util::json_encode($sourcedata);
-        $record->timeallocated = $now;
+        $record->sourceinstanceid = $sourceinstanceid;
+        $record->timeallocated = empty($dateoverrides['timeallocated']) ? $now : $dateoverrides['timeallocated'];
         $record->timecreated = $now;
 
-        $startdate = (object)json_decode($program->startdatejson);
-        if ($startdate->type === 'allocation') {
-            $record->timestart = $record->timeallocated;
-        } else if ($startdate->type === 'date') {
-            $record->timestart = $startdate->date;
-        } else if ($startdate->type === 'delay') {
-            $d = new \DateTime('@' . $record->timeallocated);
-            $d->add(new \DateInterval($startdate->delay));
-            $record->timestart = $d->getTimestamp();
-        } else {
-            throw new \coding_exception('invalid program start');
-        }
+        $record->timestart = empty($dateoverrides['timestart']) ?
+            allocation::get_default_timestart($program, $record->timeallocated) : $dateoverrides['timestart'];
+        $record->timedue = empty($dateoverrides['timedue']) ?
+            allocation::get_default_timedue($program, $record->timeallocated, $record->timestart) : $dateoverrides['timedue'];
+        $record->timeend = empty($dateoverrides['timeend']) ?
+            allocation::get_default_timeend($program, $record->timeallocated, $record->timestart) : $dateoverrides['timeend'];
 
-        $duedate = (object)json_decode($program->duedatejson);
-        if ($duedate->type === 'notset') {
-            $record->timedue = null;
-        } else if ($duedate->type === 'date') {
-            $record->timedue = $duedate->date;
-        } else if ($duedate->type === 'delay') {
-            $d = new \DateTime('@' . $record->timeallocated);
-            $d->add(new \DateInterval($duedate->delay));
-            $record->timedue = $d->getTimestamp();
-        } else {
-            throw new \coding_exception('invalid program due');
+        // NOTE: do not validate dates here, the reason is that we the defaults validity may change over time.
+        if ($record->timeend && $record->timeend <= $record->timestart) {
+            $record->timeend = $record->timestart + 1;
         }
-
-        $enddate = (object)json_decode($program->enddatejson);
-        if ($enddate->type === 'notset') {
-            $record->timeend = null;
-        } else if ($enddate->type === 'date') {
-            $record->timeend = $enddate->date;
-        } else if ($enddate->type === 'delay') {
-            $d = new \DateTime('@' . $record->timeallocated);
-            $d->add(new \DateInterval($enddate->delay));
-            $record->timeend = $d->getTimestamp();
-        } else {
-            throw new \coding_exception('invalid program end');
+        if ($record->timedue && $record->timedue <= $record->timestart) {
+            $record->timedue = $record->timestart + 1;
         }
-
-        foreach ($dateoverrides as $k => $v) {
-            if ($k !== 'timeallocated' && $k !== 'timestart' && $k !== 'timedue' && $k !== 'timeend') {
-                throw new \coding_exception('invalid date override');
-            }
-            $record->{$k} = $v;
+        if ($record->timedue && $record->timeend && $record->timedue > $record->timeend) {
+            $record->timedue = $record->timeend;
         }
 
         $record->id = $DB->insert_record('enrol_programs_allocations', $record);
         $allocation = $DB->get_record('enrol_programs_allocations', ['id' => $record->id], '*', MUST_EXIST);
 
+        \enrol_programs\local\allocation_calendar_event::create_allocation_calendar_events($allocation, $program);
         \enrol_programs\local\allocation::make_snapshot($allocation->id, 'allocation');
 
         $event = \enrol_programs\event\user_allocated::create_from_allocation($allocation, $program);
         $event->trigger();
 
-        static::notify_allocation($user, $program, $source, $allocation);
+        \enrol_programs\local\notification\allocation::notify_now($user, $program, $source, $allocation);
 
         return $allocation;
     }
@@ -241,6 +255,18 @@ abstract class base {
     public static function encode_datajson(stdClass $formdata): string {
         // Override if necessary.
         return \enrol_programs\local\util::json_encode([]);
+    }
+
+    /**
+     * Callback method for source updates.
+     *
+     * @param stdClass|null $oldsource
+     * @param stdClass $data
+     * @param stdClass|null $source
+     * @return void
+     */
+    public static function after_update(?stdClass $oldsource, stdClass $data, ?stdClass $source): void {
+        // Override if necessary.
     }
 
     /**
@@ -290,7 +316,7 @@ abstract class base {
         $result = static::render_status_details($program, $source);
 
         $context = \context::instance_by_id($program->contextid);
-        if (has_capability('enrol/programs:edit', $context)) {
+        if (has_capability('enrol/programs:edit', $context) && static::is_update_allowed($program)) {
             $label = get_string('updatesource', 'enrol_programs', static::get_name());
             $editurl = new \moodle_url('/enrol/programs/management/program_source_edit.php', ['programid' => $program->id, 'type' => $type]);
             $editbutton = new \local_openlms\output\dialog_form\icon($editurl, 'i/settings', $label);
@@ -320,6 +346,12 @@ abstract class base {
 
         $program = $DB->get_record('enrol_programs_programs', ['id' => $data->programid], '*', MUST_EXIST);
         $source = $DB->get_record('enrol_programs_sources', ['type' => $sourcetype, 'programid' => $program->id]);
+        if ($source) {
+            $oldsource = clone($source);
+        } else {
+            $source = null;
+            $oldsource = null;
+        }
         if ($source && $source->type !== $data->type) {
             throw new \coding_exception('Invalid source type');
         }
@@ -327,30 +359,33 @@ abstract class base {
         if ($data->enable) {
             if ($source) {
                 $source->datajson = $sourceclass::encode_datajson($data);
+                $source->auxint1 = $data->auxint1 ?? null;
+                $source->auxint2 = $data->auxint2 ?? null;
+                $source->auxint3 = $data->auxint3 ?? null;
                 $DB->update_record('enrol_programs_sources', $source);
             } else {
                 $source = new \stdClass();
                 $source->programid = $data->programid;
                 $source->type = $sourcetype;
                 $source->datajson = $sourceclass::encode_datajson($data);
+                $source->auxint1 = $data->auxint1 ?? null;
+                $source->auxint2 = $data->auxint2 ?? null;
+                $source->auxint3 = $data->auxint3 ?? null;
                 $source->id = $DB->insert_record('enrol_programs_sources', $source);
             }
+            $source = $DB->get_record('enrol_programs_sources', ['id' => $source->id], '*', MUST_EXIST);
         } else {
             if ($source) {
                 if ($DB->record_exists('enrol_programs_allocations', ['sourceid' => $source->id])) {
                     throw new \coding_exception('Cannot delete source with allocations');
                 }
                 $DB->delete_records('enrol_programs_requests', ['sourceid' => $source->id]);
+                $DB->delete_records('enrol_programs_src_cohorts', ['sourceid' => $source->id]);
                 $DB->delete_records('enrol_programs_sources', ['id' => $source->id]);
                 $source = null;
             }
         }
-
-        if ($source) {
-            $source = $DB->get_record('enrol_programs_sources', ['id' => $source->id], '*', MUST_EXIST);
-        } else {
-            $source = null;
-        }
+        $sourceclass::after_update($oldsource, $data, $source);
 
         \enrol_programs\local\program::make_snapshot($data->programid, 'update_source');
 
@@ -377,59 +412,6 @@ abstract class base {
     }
 
     /**
-     * Send notifications related to allocation.
-     *
-     * @param stdClass $user
-     * @param stdClass $program
-     * @param stdClass $source
-     * @param stdClass $allocation
-     * @return void
-     */
-    public static function notify_allocation(stdClass $user, stdClass $program, stdClass $source, stdClass $allocation): void {
-        global $DB;
-
-        if ($program->archived || $allocation->archived) {
-            // Never send notifications for archived stuff.
-            return;
-        }
-
-        if (!$source->notifyallocation) {
-            return;
-        }
-
-        $stringprefix = 'source_' . static::get_type() . '_notification_allocation';
-        if (!get_string_manager()->string_exists($stringprefix . '_subject', 'enrol_programs')) {
-            $stringprefix = 'source_base_notification_allocation';
-        }
-
-        $oldforcelang = force_current_language($user->lang);
-
-        $a = \enrol_programs\local\notification::get_standard_placeholders($program, $source, $allocation, $user);
-        $subject = get_string($stringprefix . '_subject', 'enrol_programs', $a);
-        $body = get_string($stringprefix . '_body', 'enrol_programs', $a);
-
-        $message = new \core\message\message();
-        $message->notification = 1;
-        $message->component = 'enrol_programs';
-        $message->name = 'allocation_notification';
-        $message->userfrom = static::get_allocator($program, $source, $allocation);
-        $message->userto = $user;
-        $message->subject = $subject;
-        $message->fullmessage = $body;
-        $message->fullmessageformat = FORMAT_MARKDOWN;
-        $message->fullmessagehtml = markdown_to_html($body);
-        $message->smallmessage = $subject;
-        $message->contexturlname = $a->program_fullname;
-        $message->contexturl = $a->program_url;
-
-        if (message_send($message)) {
-            $DB->set_field('enrol_programs_allocations', 'timenotifiedallocation', time(), ['id' => $allocation->id]);
-        }
-
-        force_current_language($oldforcelang);
-    }
-
-    /**
      * Deallocate user from a program.
      *
      * @param stdClass $program
@@ -441,13 +423,18 @@ abstract class base {
         global $DB;
 
         if (static::get_type() !== $source->type || $program->id != $allocation->programid || $program->id != $source->programid) {
-            throw new \coding_exception('invalid paramters');
+            throw new \coding_exception('invalid parameters');
         }
         $user = $DB->get_record('user', ['id' => $allocation->userid]);
 
         $trans = $DB->start_delegated_transaction();
 
         \enrol_programs\local\allocation::make_snapshot($allocation->id, 'deallocation');
+
+        if ($user) {
+            \enrol_programs\local\notification\deallocation::notify_now($user, $program, $source, $allocation);
+        }
+        \enrol_programs\local\notification_manager::delete_allocation_notifications($allocation);
 
         $items = $DB->get_records('enrol_programs_items', ['programid' => $allocation->programid]);
         foreach ($items as $item) {
@@ -460,66 +447,10 @@ abstract class base {
 
         \enrol_programs\local\allocation::fix_allocation_sources($program->id, $allocation->userid);
         \enrol_programs\local\allocation::fix_user_enrolments($program->id, $allocation->userid);
+        \enrol_programs\local\allocation_calendar_event::delete_allocation_calendar_events($allocation);
 
         $event = \enrol_programs\event\user_deallocated::create_from_allocation($allocation, $program);
         $event->trigger();
-
-        if ($user && !$user->deleted) {
-            static::notify_deallocation($user, $program, $source, $allocation);
-        }
-    }
-
-    /**
-     * Notify users about deallocation.
-     *
-     * @param stdClass $user
-     * @param stdClass $program
-     * @param stdClass $source
-     * @param stdClass $allocation
-     * @return void
-     */
-    public static function notify_deallocation(stdClass $user, stdClass $program, stdClass $source, stdClass $allocation): void {
-        global $DB;
-
-        if ($program->archived || $allocation->archived) {
-            // Never send notifications for archived stuff.
-            return;
-        }
-
-        if (!$program->notifydeallocation) {
-            return;
-        }
-
-        $stringprefix = 'source_' . static::get_type() . '_notification_deallocation';
-        if (!get_string_manager()->string_exists($stringprefix . '_subject', 'enrol_programs')) {
-            $stringprefix = 'source_base_notification_deallocation';
-        }
-
-        $oldforcelang = force_current_language($user->lang);
-
-        $a = \enrol_programs\local\notification::get_standard_placeholders($program, $source, $allocation, $user);
-        $subject = get_string($stringprefix . '_subject', 'enrol_programs', $a);
-        $body = get_string($stringprefix . '_body', 'enrol_programs', $a);
-
-        $message = new \core\message\message();
-        $message->notification = 1;
-        $message->component = 'enrol_programs';
-        $message->name = 'deallocation_notification';
-        $message->userfrom = static::get_allocator($program, $source, $allocation);
-        $message->userto = $user;
-        $message->subject = $subject;
-        $message->fullmessage = $body;
-        $message->fullmessageformat = FORMAT_MARKDOWN;
-        $message->fullmessagehtml = markdown_to_html($body);
-        $message->smallmessage = $subject;
-        $message->contexturlname = $a->program_fullname;
-        $message->contexturl = $a->program_url;
-
-        if (message_send($message)) {
-            $DB->set_field('enrol_programs_allocations', 'timenotifieddeallocation', time(), ['id' => $allocation->id]);
-        }
-
-        force_current_language($oldforcelang);
     }
 }
 

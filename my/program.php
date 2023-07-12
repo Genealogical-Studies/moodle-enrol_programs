@@ -18,7 +18,7 @@
  * My program view.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -31,7 +31,7 @@
 /** @var stdClass $USER */
 
 use enrol_programs\local\allocation;
-use enrol_programs\local\notification;
+use enrol_programs\local\notification_manager;
 
 require('../../../config.php');
 
@@ -72,7 +72,7 @@ if ($allocation && !$allocation->archived) {
     // Make sure the enrolments are 100% up-to-date for the current user,
     // this is where are they going to look first in case of any problems.
     allocation::fix_user_enrolments($program->id, $USER->id);
-    notification::trigger_notifications($program->id, $USER->id);
+    notification_manager::trigger_notifications($program->id, $USER->id);
     $allocation = $DB->get_record('enrol_programs_allocations', ['programid' => $program->id, 'userid' => $USER->id]);
 }
 if (!$allocation || $allocation->archived) {

@@ -20,7 +20,7 @@ namespace enrol_programs\local;
  * Utility class for programs.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -46,7 +46,7 @@ final class util {
      * @return string|null
      */
     public static function normalise_delay(?string $string): ?string {
-        if (trim($string) === '') {
+        if (trim($string ?? '') === '') {
             return null;
         }
 

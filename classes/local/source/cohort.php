@@ -22,7 +22,7 @@ use stdClass;
  * Program allocation for all visible cohort members.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -36,6 +36,28 @@ final class cohort extends base {
      */
     public static function get_type(): string {
         return 'cohort';
+    }
+
+    /**
+     * Render details about this enabled source in a program management ui.
+     *
+     * @param stdClass $program
+     * @param stdClass|null $source
+     * @return string
+     */
+    public static function render_status_details(stdClass $program, ?stdClass $source): string {
+        $result = parent::render_status_details($program, $source);
+
+        if ($source) {
+            $cohorts = cohort::fetch_allocation_cohorts_menu($source->id);
+            \core_collator::asort($cohorts);
+            if ($cohorts) {
+                $cohorts = array_map('format_string', $cohorts);
+                $result .= ' (' . implode(', ', $cohorts) .')';
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -63,6 +85,57 @@ final class cohort extends base {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Callback method for source updates.
+     *
+     * @param stdClass|null $oldsource
+     * @param stdClass $data
+     * @param stdClass|null $source
+     * @return void
+     */
+    public static function after_update(?stdClass $oldsource, stdClass $data, ?stdClass $source): void {
+        global $DB;
+
+        if (!$source) {
+            // Just deleted or not enabled at all.
+            return;
+        }
+
+        $oldcohorts = cohort::fetch_allocation_cohorts_menu($source->id);
+        $sourceid = $DB->get_field('enrol_programs_sources', 'id', ['programid' => $data->programid, 'type' => 'cohort']);
+        $data->cohorts = $data->cohorts ?? [];
+        foreach ($data->cohorts as $cid) {
+            if (isset($oldcohorts[$cid])) {
+                unset($oldcohorts[$cid]);
+                continue;
+            }
+            $record = (object)['sourceid' => $sourceid, 'cohortid' => $cid];
+            $DB->insert_record('enrol_programs_src_cohorts', $record);
+        }
+        foreach ($oldcohorts as $cid => $unused) {
+            $DB->delete_records('enrol_programs_src_cohorts', ['sourceid' => $sourceid, 'cohortid' => $cid]);
+        }
+    }
+
+    /**
+     * Fetch cohorts that allow program allocation automatically.
+     *
+     * @param int $sourceid
+     * @return array
+     */
+    public static function fetch_allocation_cohorts_menu(int $sourceid): array {
+        global $DB;
+
+        $sql = "SELECT c.id, c.name
+                  FROM {cohort} c
+                  JOIN {enrol_programs_src_cohorts} pc ON c.id = pc.cohortid                                    
+                 WHERE pc.sourceid = :sourceid
+              ORDER BY c.name ASC, c.id ASC";
+        $params = ['sourceid' => $sourceid];
+
+        return $DB->get_records_sql_menu($sql, $params);
     }
 
     /**
@@ -97,9 +170,9 @@ final class cohort extends base {
         $params['now2'] = $now;
         $sql = "SELECT DISTINCT p.id, cm.userid, s.id AS sourceid, pa.id AS allocationid
                   FROM {cohort_members} cm
-                  JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid
-                  JOIN {enrol_programs_programs} p ON p.id = pc.programid
-                  JOIN {enrol_programs_sources} s ON s.programid = p.id AND s.type = 'cohort'
+                  JOIN {enrol_programs_src_cohorts} psc ON psc.cohortid = cm.cohortid
+                  JOIN {enrol_programs_sources} s ON s.id = psc.sourceid
+                  JOIN {enrol_programs_programs} p ON p.id = s.programid
              LEFT JOIN {enrol_programs_allocations} pa ON pa.programid = p.id AND pa.userid = cm.userid
                  WHERE (pa.id IS NULL OR (pa.archived = 1 AND pa.sourceid = s.id))
                        AND p.archived = 0
@@ -155,8 +228,8 @@ final class cohort extends base {
                        AND NOT EXISTS (
                             SELECT 1
                               FROM {cohort_members} cm
-                              JOIN {enrol_programs_cohorts} pc ON pc.cohortid = cm.cohortid
-                             WHERE cm.userid = pa.userid AND pc.programid = p.id
+                              JOIN {enrol_programs_src_cohorts} psc ON psc.cohortid = cm.cohortid
+                             WHERE cm.userid = pa.userid AND psc.sourceid = s.id
                        )
                        AND (p.timeallocationstart IS NULL OR p.timeallocationstart <= :now1)
                        AND (p.timeallocationend IS NULL OR p.timeallocationend > :now2)

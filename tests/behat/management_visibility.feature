@@ -1,8 +1,8 @@
-@enrol @enrol_programs @olms
+@enrol @enrol_programs @openlms
 Feature: Program visibility management tests
 
   Background:
-    Given Unnecessary Admin bookmarks block gets deleted
+    Given unnecessary Admin bookmarks block gets deleted
     And the following "categories" exist:
       | name  | category | idnumber |
       | Cat 1 | 0        | CAT1     |

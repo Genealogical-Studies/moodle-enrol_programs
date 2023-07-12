@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="enrol/programs/db" VERSION="20220523" COMMENT="XMLDB file for Open LMS enrol/programs"
+<XMLDB PATH="enrol/programs/db" VERSION="20230429" COMMENT="XMLDB file for Open LMS enrol/programs"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -21,14 +21,6 @@
         <FIELD NAME="startdatejson" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Calculation rules for user start date in program allocation"/>
         <FIELD NAME="duedatejson" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Calculation rules for user due date in program allocation"/>
         <FIELD NAME="enddatejson" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Calculation rules for user end date in program allocation"/>
-        <FIELD NAME="notifystart" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users when program started"/>
-        <FIELD NAME="notifycompleted" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users when program was completed"/>
-        <FIELD NAME="notifyduesoon" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users before their due date, unless already completed"/>
-        <FIELD NAME="notifydue" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users before their due date passed, unless already completed"/>
-        <FIELD NAME="notifyendsoon" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users before their end date, unless already completed"/>
-        <FIELD NAME="notifyendcompleted" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users at the end of program which they completed"/>
-        <FIELD NAME="notifyendfailed" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users at the end of program which they failed"/>
-        <FIELD NAME="notifydeallocation" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users when they are deallocated from program"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
@@ -90,7 +82,7 @@
         <INDEX NAME="itemid-prerequisiteitemid" UNIQUE="true" FIELDS="itemid, prerequisiteitemid" COMMENT="Prevent duplicates"/>
       </INDEXES>
     </TABLE>
-    <TABLE NAME="enrol_programs_cohorts" COMMENT="Members of these cohorts may browse non-public programs before allocation, optionally they can be allocated automatically">
+    <TABLE NAME="enrol_programs_cohorts" COMMENT="Members of these cohorts may browse non-public programs before allocation">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="programid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
@@ -111,12 +103,29 @@
         <FIELD NAME="programid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="type" TYPE="char" LENGTH="50" NOTNULL="true" SEQUENCE="false" COMMENT="Type of allocation - manual, self, cohort, certification, etc."/>
         <FIELD NAME="datajson" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="General source allocation settings"/>
-        <FIELD NAME="notifyallocation" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Notify users when they are allocated to program via this source"/>
+        <FIELD NAME="auxint1" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="auxint2" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="auxint3" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="programid" TYPE="foreign" FIELDS="programid" REFTABLE="enrol_programs_programs" REFFIELDS="id"/>
       </KEYS>
+    </TABLE>
+    <TABLE NAME="enrol_programs_frameworks" COMMENT="Allowed UDP frameworks to use with udplans source">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sourceid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="frameworkid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="requirecap" TYPE="int" LENGTH="1" NOTNULL="true" SEQUENCE="false" COMMENT="0 means that anybody who can use framework can add program to plan, 1 means Add program to plan capability is required in program context"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sourceid" TYPE="foreign" FIELDS="sourceid" REFTABLE="enrol_programs_sources" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="frameworkid-sourceid" UNIQUE="true" FIELDS="frameworkid, sourceid"/>
+      </INDEXES>
     </TABLE>
     <TABLE NAME="enrol_programs_requests" COMMENT="List of people waiting for allocation to programs, entry is deleted after allocation, there are no historic snapshots for requests">
       <FIELDS>
@@ -146,20 +155,12 @@
         <FIELD NAME="sourceid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Means of user allocation"/>
         <FIELD NAME="archived" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="All enrolments are suspended when user allocation is archived and completion is frozen, useful when user is removed from cohort when auto allocating"/>
         <FIELD NAME="sourcedatajson" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Extra allocation data belonging to source, it can store waitlist history, person who allocated mannually, etc."/>
+        <FIELD NAME="sourceinstanceid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Some external reference that can be used from source classes"/>
         <FIELD NAME="timeallocated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Date when user was allocated to program"/>
         <FIELD NAME="timestart" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Date when program opens for this user"/>
         <FIELD NAME="timedue" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Expected completion date"/>
         <FIELD NAME="timeend" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Date when program closes for this user (progress is fronzen after this date and enrolments are suspended)"/>
         <FIELD NAME="timecompleted" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="User program completion date, NULL means program not completed"/>
-        <FIELD NAME="timenotifiedallocation" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about allocation via this source"/>
-        <FIELD NAME="timenotifiedstart" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about program that just started"/>
-        <FIELD NAME="timenotifiedcompleted" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about their completion"/>
-        <FIELD NAME="timenotifiedduesoon" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about incoming due date if they did not complete yet"/>
-        <FIELD NAME="timenotifieddue" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified that due date passed, but they did not complete yet"/>
-        <FIELD NAME="timenotifiedendsoon" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about program ending soon if they did not complete yet"/>
-        <FIELD NAME="timenotifiedendcompleted" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about end of program that they completed"/>
-        <FIELD NAME="timenotifiedendfailed" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about end of program that they failed"/>
-        <FIELD NAME="timenotifieddeallocation" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Time when user was notified about allocation via this source"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
@@ -171,6 +172,7 @@
       <INDEXES>
         <INDEX NAME="programid-userid" UNIQUE="true" FIELDS="programid, userid" COMMENT="Only one allocation of user per program, archive and delete allocation if change needed, or use other evidence in case of certification certification"/>
         <INDEX NAME="archived-timestart-timeend" UNIQUE="false" FIELDS="archived, timestart, timeend" COMMENT="Used in queries that deal with non-archived active allocations only"/>
+        <INDEX NAME="sourceinstanceid" UNIQUE="false" FIELDS="sourceinstanceid"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="enrol_programs_completions" COMMENT="Program item completions, added after item completion">
@@ -241,6 +243,7 @@
         <FIELD NAME="sourceid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="archived" TYPE="int" LENGTH="1" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="sourcedatajson" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="sourceinstanceid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="timeallocated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="timestart" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="timedue" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
@@ -259,6 +262,56 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="reason-userid-programid" UNIQUE="false" FIELDS="reason, userid, programid" COMMENT="Faster lookup by reason and userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="enrol_programs_certs" COMMENT="List of certificate templates used for program completions">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="programid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="templateid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Template for program certificate"/>
+        <FIELD NAME="expirydatetype" TYPE="int" LENGTH="1" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="expirydateoffset" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Timestamp for absolute dates, duration in seconds for relative dates"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="programid" TYPE="foreign-unique" FIELDS="programid" REFTABLE="enrol_programs_programs" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="templateid" UNIQUE="false" FIELDS="templateid" COMMENT="Soft reference to tool_certificate_templates.id, one template can be used in multiple programs"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="enrol_programs_certs_issues" COMMENT="Issued certificates created via tool_certificate">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="programid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="allocationid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timecompleted" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="issueid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="programid" TYPE="foreign" FIELDS="programid" REFTABLE="enrol_programs_programs" REFFIELDS="id"/>
+        <KEY NAME="allocationid" TYPE="foreign" FIELDS="allocationid" REFTABLE="enrol_programs_allocations" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="issueid" UNIQUE="true" FIELDS="issueid" COMMENT="Soft reference to tool_certificate_issues.id"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="enrol_programs_src_cohorts" COMMENT="Program can be automatically allocated to the members of these cohorts if configured in that way">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sourceid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="cohortid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="cohortid" TYPE="foreign" FIELDS="cohortid" REFTABLE="cohort" REFFIELDS="id"/>
+        <KEY NAME="sourceid" TYPE="foreign" FIELDS="sourceid" REFTABLE="enrol_programs_sources" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sourceid-cohortid" UNIQUE="true" FIELDS="sourceid, cohortid"/>
       </INDEXES>
     </TABLE>
   </TABLES>

@@ -18,7 +18,7 @@
  * Program management interface.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -79,7 +79,6 @@ $managementoutput = $PAGE->get_renderer('enrol_programs', 'management');
 $catalogueoutput = $PAGE->get_renderer('enrol_programs', 'catalogue');
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading(format_string($program->fullname));
 
 echo $managementoutput->render_management_program_tabs($program, 'users');
 
@@ -197,7 +196,7 @@ $sql = "SELECT a.*, s.type AS sourcetype, $userfields
          WHERE a.programid = :programid $usersearch $statusselect
       ORDER BY $orderby";
 $params['programid'] = $program->id;
-$allocations = $DB->get_records_sql($sql, $params);
+$allocations = $DB->get_records_sql($sql, $params, $page * $perpage, $perpage);
 
 $sql = "SELECT COUNT(a.id)
           FROM {enrol_programs_allocations} a

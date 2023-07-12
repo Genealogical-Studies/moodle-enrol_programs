@@ -23,7 +23,7 @@ use enrol_programs\local\allocation;
  * Edit approval source settings.
  *
  * @package    enrol_programs
- * @copyright  Copyright (c) 2022 Open LMS (https://www.openlms.net/)
+ * @copyright  2022 Open LMS (https://www.openlms.net/)
  * @author     Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -42,7 +42,7 @@ final class source_approval_edit extends \local_openlms\dialog_form {
 
         $mform->addElement('select', 'approval_allowrequest', get_string('source_approval_allowrequest', 'enrol_programs'),
             ['1' => get_string('yes'), '0' => get_string('no')]);
-        $mform->setDefault('approval_allowrequest', 1);
+        $mform->setDefault('approval_allowrequest', $source->approval_allowrequest);
         $mform->hideIf('approval_allowrequest', 'enable', 'eq', '0');
 
         $mform->addElement('hidden', 'programid');
