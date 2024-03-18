@@ -18,6 +18,7 @@ namespace enrol_programs\output\my;
 
 use enrol_programs\local\allocation;
 use enrol_programs\local\program;
+use enrol_programs\local\util;
 use enrol_programs\local\content\item,
     enrol_programs\local\content\top,
     enrol_programs\local\content\set,
@@ -76,14 +77,20 @@ EOT;
         return $result;
     }
 
-    public function render_user_allocation(stdClass $program, stdClass $allocation): string {
+    public function render_user_allocation(stdClass $program, stdClass $source, stdClass $allocation): string {
         $strnotset = get_string('notset', 'enrol_programs');
+
+        $sourceclasses = allocation::get_source_classes();
+        /** @var \enrol_programs\local\source\base $sourceclass */
+        $sourceclass = $sourceclasses[$source->type];
 
         $result = '';
 
         $result .= '<dl class="row">';
         $result .= '<dt class="col-3">' . get_string('programstatus', 'enrol_programs') . ':</dt><dd class="col-9">'
             . allocation::get_completion_status_html($program, $allocation) . '</dd>';
+        $result .= '<dt class="col-3">' . get_string('source', 'enrol_programs') . ':</dt><dd class="col-9">'
+            . $sourceclass::render_allocation_source($program, $source, $allocation) . '</dd>';
         $result .= '<dt class="col-3">' . get_string('allocationdate', 'enrol_programs') . ':</dt><dd class="col-9">'
             . userdate($allocation->timeallocated) . '</dd>';
         $result .= '<dt class="col-3">' . get_string('programstart', 'enrol_programs') . ':</dt><dd class="col-9">'
@@ -114,6 +121,12 @@ EOT;
             if ($item instanceof set) {
                 $completiontype = $item->get_sequencetype_info();
             }
+            if ($completiondelay = $item->get_completiondelay()) {
+                if ($completiontype !== '') {
+                    $completiontype .= '<br />';
+                }
+                $completiontype .= '<small>' . get_string('completiondelay', 'enrol_programs') . ': ' . util::format_duration($completiondelay) . '</small>';
+            }
 
             if ($item instanceof course) {
                 $courseid = $item->get_courseid();
@@ -143,14 +156,19 @@ EOT;
                 $itemname = $padding . $this->output->pix_icon('itemset', get_string('set', 'enrol_programs'), 'enrol_programs') . $fullname;
             }
 
-            $row = [$itemname, $completiontype];
+            if ($item instanceof top) {
+                $points = '';
+            } else {
+                $points = $item->get_points();
+            }
 
             $completioninfo = '';
             $completion = $DB->get_record('enrol_programs_completions', ['itemid' => $item->get_id(), 'allocationid' => $allocation->id]);
             if ($completion) {
                 $completioninfo = userdate($completion->timecompleted, get_string('strftimedatetimeshort'));
             }
-            $row[] = $completioninfo;
+
+            $row = [$itemname, $points, $completiontype, $completioninfo];
 
             $rows[] = $row;
 
@@ -161,8 +179,12 @@ EOT;
         $renderercolumns($top, 0);
 
         $table = new \html_table();
-        $table->head = [get_string('item', 'enrol_programs'), get_string('sequencetype', 'enrol_programs')];
-        $table->head[] = get_string('completiondate', 'enrol_programs');
+        $table->head = [
+            get_string('item', 'enrol_programs'),
+            get_string('itempoints', 'enrol_programs'),
+            get_string('sequencetype', 'enrol_programs'),
+            get_string('completiondate', 'enrol_programs'),
+        ];
         $table->id = 'program_content';
         $table->attributes['class'] = 'admintable generaltable';
         $table->data = $rows;

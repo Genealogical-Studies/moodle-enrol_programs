@@ -31,6 +31,7 @@
 
 use enrol_programs\local\management;
 use enrol_programs\local\program;
+use enrol_programs\local\content\set;
 
 if (!empty($_SERVER['HTTP_X_LEGACY_DIALOG_FORM_REQUEST'])) {
     define('AJAX_SCRIPT', true);
@@ -71,12 +72,16 @@ if ($form->is_cancelled()) {
 
 if ($data = $form->get_data()) {
     if ($data->addset) {
-        $set = $top->append_set($set, $data->fullname, $data->sequencetype, $data->minprerequisites);
+        $set = $top->append_set($set, (array)$data);
     }
     foreach ($data->courses as $cid) {
         $coursecontext = context_course::instance($cid);
         require_capability('enrol/programs:addcourse', $coursecontext);
-        $top->append_course($set, $cid, null);
+        $idata = ['points' => $data->points];
+        if (!empty($data->completiondelay)) {
+            $idata['completiondelay'] = $data->completiondelay;
+        }
+        $top->append_course($set, $cid, $idata);
     }
 
     $form->redirect_submitted($returnurl);

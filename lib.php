@@ -169,12 +169,9 @@ function enrol_programs_pre_course_category_delete(\stdClass $category) {
  * @return \core_calendar\local\event\entities\action_interface|null
  */
 function enrol_programs_core_calendar_provide_event_action(calendar_event $event,
-        \core_calendar\action_factory $factory, $userid = 0) {
+        \core_calendar\action_factory $factory, int $userid = 0) {
 
-    global $USER, $DB;
-    if (empty($userid)) {
-        $userid = $USER->id;
-    }
+    global $DB;
 
     // The event object (core_calendar\local\event\entities\event) passed does not include an instance property so we need to pull the DB record.
     $event = $DB->get_record('event', ['id' => $event->id], '*', MUST_EXIST);
@@ -182,10 +179,33 @@ function enrol_programs_core_calendar_provide_event_action(calendar_event $event
 
     return $factory->create_instance(
         get_string('view'),
-        new \moodle_url('/enrol/programs/view.php', ['id' => $allocation->programid]),
+        new \moodle_url('/enrol/programs/my/program.php', ['id' => $allocation->programid]),
         1,
         true
     );
+}
+
+/**
+ * Add nodes to myprofile page.
+ *
+ * @param \core_user\output\myprofile\tree $tree Tree object
+ * @param stdClass $user user object
+ * @param bool $iscurrentuser
+ * @param stdClass $course Course object
+ */
+function enrol_programs_myprofile_navigation(core_user\output\myprofile\tree $tree, $user, $iscurrentuser, $course) {
+    global $USER;
+
+    if (!enrol_is_enabled('programs')) {
+        return;
+    }
+
+    if ($USER->id == $user->id) {
+        $link = get_string('myprograms', 'enrol_programs');
+        $url = new moodle_url('/enrol/programs/my/index.php');
+        $node = new core_user\output\myprofile\node('miscellaneous', 'enrolprograms_programs', $link, null, $url);
+        $tree->add_node($node);
+    }
 }
 
 /**
@@ -196,6 +216,7 @@ function enrol_programs_get_fontawesome_icon_map() {
         'enrol_programs:appenditem' => 'fa-plus-square',
         'enrol_programs:catalogue' => 'fa-cubes',
         'enrol_programs:deleteitem' => 'fa-trash-o',
+        'enrol_programs:import' => 'fa-copy',
         'enrol_programs:itemcourse' => 'fa-graduation-cap',
         'enrol_programs:itemset' => 'fa-list',
         'enrol_programs:itemtop' => 'fa-cubes',

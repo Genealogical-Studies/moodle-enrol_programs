@@ -225,13 +225,14 @@ abstract class base {
         $record->id = $DB->insert_record('enrol_programs_allocations', $record);
         $allocation = $DB->get_record('enrol_programs_allocations', ['id' => $record->id], '*', MUST_EXIST);
 
-        \enrol_programs\local\allocation_calendar_event::create_allocation_calendar_events($allocation, $program);
         \enrol_programs\local\allocation::make_snapshot($allocation->id, 'allocation');
 
         $event = \enrol_programs\event\user_allocated::create_from_allocation($allocation, $program);
         $event->trigger();
 
         \enrol_programs\local\notification\allocation::notify_now($user, $program, $source, $allocation);
+
+        \enrol_programs\local\calendar::fix_allocation_events($allocation, $program);
 
         return $allocation;
     }
@@ -284,6 +285,46 @@ abstract class base {
     }
 
     /**
+     * Can settings of this source be imported to other program?
+     *
+     * @param stdClass $fromprogram
+     * @param stdClass $targetprogram
+     * @return bool
+     */
+    public static function is_import_allowed(stdClass $fromprogram, stdClass $targetprogram): bool {
+        return false;
+    }
+
+    /**
+     * Import source data from one program to another.
+     *
+     * @param int $fromprogramid
+     * @param int $targetprogramid
+     * @return stdClass created or updated source record
+     */
+    public static function import_source_data(int $fromprogramid, int $targetprogramid): stdClass {
+        global $DB;
+
+        $fromsource = $DB->get_record('enrol_programs_sources',
+            ['programid' => $fromprogramid, 'type' => static::get_type()], '*', MUST_EXIST);
+        $targetsource = $DB->get_record('enrol_programs_sources',
+            ['programid' => $targetprogramid, 'type' => static::get_type()]);
+
+        if ($targetsource) {
+            $fromsource->id = $targetsource->id;
+            $fromsource->programid = $targetprogramid;
+            $DB->update_record('enrol_programs_sources', $fromsource);
+        } else {
+            unset($fromsource->id);
+            $fromsource->programid = $targetprogramid;
+            $DB->insert_record('enrol_programs_sources', $fromsource);
+        }
+
+        return $DB->get_record('enrol_programs_sources',
+            ['programid' => $targetprogramid, 'type' => static::get_type()], '*', MUST_EXIST);
+    }
+
+    /**
      * Render details about this enabled source in a program management ui.
      *
      * @param stdClass $program
@@ -325,6 +366,24 @@ abstract class base {
         }
 
         return $result;
+    }
+
+    /**
+     * Render allocation source information.
+     *
+     * @param stdClass $program
+     * @param stdClass $source
+     * @param stdClass $allocation
+     * @return string HTML fragment
+     */
+    public static function render_allocation_source(stdClass $program, stdClass $source, stdClass $allocation): string {
+        $type = static::get_type();
+
+        if ($source && $source->type !== $type) {
+            throw new \coding_exception('Invalid source type');
+        }
+
+        return static::get_name();
     }
 
     /**
@@ -417,9 +476,10 @@ abstract class base {
      * @param stdClass $program
      * @param stdClass $source
      * @param stdClass $allocation
+     * @param bool $skipnotify
      * @return void
      */
-    public static function deallocate_user(stdClass $program, stdClass $source, stdClass $allocation): void {
+    public static function deallocate_user(stdClass $program, stdClass $source, stdClass $allocation, bool $skipnotify = false): void {
         global $DB;
 
         if (static::get_type() !== $source->type || $program->id != $allocation->programid || $program->id != $source->programid) {
@@ -431,23 +491,35 @@ abstract class base {
 
         \enrol_programs\local\allocation::make_snapshot($allocation->id, 'deallocation');
 
-        if ($user) {
+        if ($user && !$skipnotify) {
             \enrol_programs\local\notification\deallocation::notify_now($user, $program, $source, $allocation);
         }
         \enrol_programs\local\notification_manager::delete_allocation_notifications($allocation);
+
+        $issues = $DB->get_records('enrol_programs_certs_issues', ['allocationid' => $allocation->id]);
+        foreach ($issues as $issue) {
+            $DB->set_field('enrol_programs_certs_issues', 'allocationid', null, ['id' => $issue->id]);
+        }
+        if (\enrol_programs\local\certificate::is_available()) {
+            foreach ($issues as $issue) {
+                $DB->set_field('tool_certificate_issues', 'archived', 1, ['id' => $issue->issueid]);
+            }
+        }
+        unset($issues);
 
         $items = $DB->get_records('enrol_programs_items', ['programid' => $allocation->programid]);
         foreach ($items as $item) {
             $DB->delete_records('enrol_programs_evidences', ['itemid' => $item->id, 'userid' => $allocation->userid]);
             $DB->delete_records('enrol_programs_completions', ['itemid' => $item->id, 'allocationid' => $allocation->id]);
         }
+        unset($items);
         $DB->delete_records('enrol_programs_allocations', ['id' => $allocation->id]);
 
         $trans->allow_commit();
 
         \enrol_programs\local\allocation::fix_allocation_sources($program->id, $allocation->userid);
         \enrol_programs\local\allocation::fix_user_enrolments($program->id, $allocation->userid);
-        \enrol_programs\local\allocation_calendar_event::delete_allocation_calendar_events($allocation);
+        \enrol_programs\local\calendar::delete_allocation_events($allocation->id);
 
         $event = \enrol_programs\event\user_deallocated::create_from_allocation($allocation, $program);
         $event->trigger();

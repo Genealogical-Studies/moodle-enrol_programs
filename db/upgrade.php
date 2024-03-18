@@ -216,5 +216,82 @@ function xmldb_enrol_programs_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2023051400, 'enrol', 'programs');
     }
 
+    if ($oldversion < 2023080900) {
+        // Changing nullability of field minprerequisites on table enrol_programs_items to null.
+        $table = new xmldb_table('enrol_programs_items');
+        $field = new xmldb_field('minprerequisites', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'sequencejson');
+        $dbman->change_field_notnull($table, $field);
+
+        // Migrade course items.
+        $sql = "UPDATE {enrol_programs_items}
+                   SET minprerequisites = NULL
+                 WHERE courseid IS NOT NULL";
+        $DB->execute($sql);
+
+        // Define field points to be added to enrol_programs_items.
+        $table = new xmldb_table('enrol_programs_items');
+        $field = new xmldb_field('points', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1', 'minprerequisites');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Define field minpoints to be added to enrol_programs_items.
+        $table = new xmldb_table('enrol_programs_items');
+        $field = new xmldb_field('minpoints', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'points');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Define index minprerequisites (not unique) to be added to enrol_programs_items.
+        $table = new xmldb_table('enrol_programs_items');
+        $index = new xmldb_index('minprerequisites', XMLDB_INDEX_NOTUNIQUE, ['minprerequisites']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        // Define index points (not unique) to be added to enrol_programs_items.
+        $table = new xmldb_table('enrol_programs_items');
+        $index = new xmldb_index('points', XMLDB_INDEX_NOTUNIQUE, ['points']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        // Define index minpoints (not unique) to be added to enrol_programs_items.
+        $table = new xmldb_table('enrol_programs_items');
+        $index = new xmldb_index('minpoints', XMLDB_INDEX_NOTUNIQUE, ['minpoints']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+        // Programs savepoint reached.
+        upgrade_plugin_savepoint(true, 2023080900, 'enrol', 'programs');
+    }
+
+    if ($oldversion < 2023081100) {
+        // Define field completiondelay to be added to enrol_programs_items.
+        $table = new xmldb_table('enrol_programs_items');
+        $field = new xmldb_field('completiondelay', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'minpoints');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Define index timecompleted (not unique) to be added to enrol_programs_completions.
+        $table = new xmldb_table('enrol_programs_completions');
+        $index = new xmldb_index('timecompleted', XMLDB_INDEX_NOTUNIQUE, ['timecompleted']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        // Programs savepoint reached.
+        upgrade_plugin_savepoint(true, 2023081100, 'enrol', 'programs');
+    }
+
+    if ($oldversion < 2023081200) {
+        // Do not use calendar API here, calendar events will be fixed during next cron run.
+        $DB->delete_records('event', ['component' => 'enrol_programs']);
+
+        // Programs savepoint reached.
+        upgrade_plugin_savepoint(true, 2023081200, 'enrol', 'programs');
+    }
+
     return true;
 }

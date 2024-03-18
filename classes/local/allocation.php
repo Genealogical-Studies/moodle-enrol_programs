@@ -22,6 +22,7 @@ use enrol_programs\local\source\cohort;
 use enrol_programs\local\source\manual;
 use enrol_programs\local\source\selfallocation;
 use enrol_programs\local\source\udplans;
+use enrol_programs\local\source\certify;
 use enrol_programs\local\content\course;
 use enrol_programs\local\content\top;
 use enrol_programs\local\content\set;
@@ -53,6 +54,10 @@ final class allocation {
 
         if (file_exists(__DIR__ . '/../../../../admin/tool/udplans/version.php')) {
             $types[udplans::get_type()] = udplans::class;
+        }
+
+        if (file_exists(__DIR__ . '/../../../../admin/tool/certify/version.php')) {
+            $types[certify::get_type()] = certify::class;
         }
 
         return $types;
@@ -505,7 +510,7 @@ final class allocation {
              LEFT JOIN {enrol_programs_completions} pc ON pc.allocationid = pa.id AND pc.itemid = pi.id
                  WHERE pc.id IS NULL
                        AND p.archived = 0 AND pa.archived = 0
-                       AND (pa.timestart IS NULL OR pa.timestart <= :now1)
+                       AND (pa.timestart <= :now1)
                        AND (pa.timeend IS NULL OR pa.timeend > :now2)
                        $programselect $userselect";
         $DB->execute($sql, $params);
@@ -529,7 +534,7 @@ final class allocation {
         $params['now3'] = $now;
         $sql = "INSERT INTO {enrol_programs_completions} (itemid, allocationid, timecompleted)
 
-                SELECT pi.id, pa.id, :now3
+                SELECT pi.id, pa.id, (:now3 + pi.completiondelay)
                   FROM {enrol_programs_allocations} pa
                   JOIN {enrol_programs_programs} p ON p.id = pa.programid
                   JOIN {enrol_programs_items} pi ON pi.programid = pa.programid
@@ -544,49 +549,93 @@ final class allocation {
 
         // Calculate set completions ignoring course items,
         // do max 100 dependencies to prevent infinite loop.
+        $params = [];
+        $programselect = '';
+        if ($programid) {
+            $programselect = "AND p.id = :programid";
+            $params['programid'] = $programid;
+        }
+        $userselect = '';
+        if ($userid) {
+            $userselect = "AND pa.userid = :userid";
+            $params['userid'] = $userid;
+        }
+        $sql = "SELECT 1
+                  FROM {enrol_programs_items} pi
+                  JOIN {enrol_programs_programs} p ON p.id = pi.programid
+                  JOIN {enrol_programs_allocations} pa ON pa.programid = p.id
+                 WHERE pi.minpoints IS NOT NULL
+                       $programselect $userselect";
+        $minpointsfound = $DB->record_exists_sql($sql, $params);
+
         for ($i = 0; $i < 100; $i++) {
-            $params = [];
-            $programselect = '';
-            if ($programid) {
-                $programselect = "AND p.id = :programid";
-                $params['programid'] = $programid;
-            }
-            $userselect = '';
-            if ($userid) {
-                $userselect = "AND pa.userid = :userid";
-                $params['userid'] = $userid;
-            }
+            $count = 0;
             $now = time();
             $params['now1'] = $now;
             $params['now2'] = $now;
-            $sql = "SELECT psi.id AS itemid, pa.id AS allocationid, psi.minprerequisites, COUNT(pric.id) AS precount
+            $params['now3'] = $now;
+            $sql = "SELECT psi.id AS itemid, pa.id AS allocationid, psi.minprerequisites, psi.completiondelay, COUNT(pric.id) AS precount
                       FROM {enrol_programs_items} psi
                       JOIN {enrol_programs_programs} p ON p.id = psi.programid
                       JOIN {enrol_programs_allocations} pa ON pa.programid = p.id
                  LEFT JOIN {enrol_programs_completions} psic ON psic.itemid = psi.id AND psic.allocationid = pa.id
                       JOIN {enrol_programs_prerequisites} pr ON pr.itemid = psi.id
-                      JOIN {enrol_programs_completions} pric ON pric.itemid = pr.prerequisiteitemid AND pric.allocationid = pa.id
-                     WHERE psic.id IS NULL AND psi.courseid IS NULL
+                      JOIN {enrol_programs_completions} pric ON pric.itemid = pr.prerequisiteitemid AND pric.allocationid = pa.id AND pric.timecompleted <= :now3
+                     WHERE psi.minprerequisites IS NOT NULL AND psic.id IS NULL
                            AND p.archived = 0 AND pa.archived = 0
-                           AND (pa.timestart IS NULL OR pa.timestart <= :now1)
+                           AND (pa.timestart <= :now1)
                            AND (pa.timeend IS NULL OR pa.timeend > :now2)
                            $programselect $userselect
-                  GROUP BY psi.id, pa.id, psi.minprerequisites
+                  GROUP BY psi.id, pa.id, psi.minprerequisites, psi.completiondelay
                     HAVING psi.minprerequisites <= COUNT(pric.id)
                   ORDER BY psi.id ASC, pa.id ASC";
             $rs = $DB->get_recordset_sql($sql, $params);
-            $count = 0;
             foreach ($rs as $completion) {
                 // NOTE: this should not return many records because this
                 // should be called with userid parameter from event observers.
                 $record = new stdClass();
                 $record->itemid = $completion->itemid;
                 $record->allocationid = $completion->allocationid;
-                $record->timecompleted = time(); // Use real time, we are not in a transaction here.
+                $record->timecompleted = time() + $completion->completiondelay; // Use real time, we are not in a transaction here.
                 $DB->insert_record('enrol_programs_completions', $record);
                 $count++;
             }
             $rs->close();
+
+            if ($minpointsfound) {
+                $now = time();
+                $params['now1'] = $now;
+                $params['now2'] = $now;
+                $params['now3'] = $now;
+                $sql = "SELECT psi.id AS itemid, pa.id AS allocationid, psi.minpoints, psi.completiondelay, SUM(pri.points) AS pointcount
+                          FROM {enrol_programs_items} psi
+                          JOIN {enrol_programs_programs} p ON p.id = psi.programid
+                          JOIN {enrol_programs_allocations} pa ON pa.programid = p.id
+                     LEFT JOIN {enrol_programs_completions} psic ON psic.itemid = psi.id AND psic.allocationid = pa.id
+                          JOIN {enrol_programs_prerequisites} pr ON pr.itemid = psi.id
+                          JOIN {enrol_programs_items} pri ON pri.id = pr.prerequisiteitemid    
+                          JOIN {enrol_programs_completions} pric ON pric.itemid = pr.prerequisiteitemid AND pric.allocationid = pa.id AND pric.timecompleted <= :now3
+                         WHERE psi.minpoints IS NOT NULL AND psic.id IS NULL
+                               AND p.archived = 0 AND pa.archived = 0
+                               AND (pa.timestart <= :now1)
+                               AND (pa.timeend IS NULL OR pa.timeend > :now2)
+                               $programselect $userselect
+                      GROUP BY psi.id, pa.id, psi.minpoints, psi.completiondelay
+                        HAVING psi.minpoints <= SUM(pri.points)
+                      ORDER BY psi.id ASC, pa.id ASC";
+                $rs = $DB->get_recordset_sql($sql, $params);
+                foreach ($rs as $completion) {
+                    // NOTE: this should not return many records because this
+                    // should be called with userid parameter from event observers.
+                    $record = new stdClass();
+                    $record->itemid = $completion->itemid;
+                    $record->allocationid = $completion->allocationid;
+                    $record->timecompleted = time() + $completion->completiondelay; // Use real time, we are not in a transaction here.
+                    $DB->insert_record('enrol_programs_completions', $record);
+                    $count++;
+                }
+                $rs->close();
+            }
 
             if (!$count) {
                 // Stop when nothing found.
@@ -609,6 +658,7 @@ final class allocation {
         $now = time();
         $params['now1'] = $now;
         $params['now2'] = $now;
+        $params['now3'] = $now;
         $sql = "SELECT e.*, pa.userid
                   FROM {user_enrolments} ue
                   JOIN {enrol} e ON e.enrol = 'programs' AND e.id = ue.enrolid
@@ -618,9 +668,9 @@ final class allocation {
              LEFT JOIN {enrol_programs_items} previ ON previ.programid = p.id AND previ.id = pi.previtemid
              LEFT JOIN {enrol_programs_completions} previc ON previc.itemid = previ.id AND previc.allocationid = pa.id
                  WHERE ue.status = :suspended
-                       AND (pi.previtemid IS NULL OR previc.timecompleted IS NOT NULL)
+                       AND (pi.previtemid IS NULL OR previc.timecompleted <= :now3)
                        AND p.archived = 0 AND pa.archived = 0
-                       AND (pa.timestart IS NULL OR pa.timestart <= :now1)
+                       AND (pa.timestart <= :now1)
                        AND (pa.timeend IS NULL OR pa.timeend > :now2)
                        $programselect $userselect
               ORDER BY e.id ASC, pa.id ASC";
@@ -696,6 +746,7 @@ final class allocation {
         // Finally, if top program item is completed, copy the completion time to program allocation,
         // we do this in a loop one by one in order to trigger the program_completed event.
         $params = [];
+        $params['now'] = time();
         $programselect = '';
         if ($programid) {
             $programselect = "AND pi.programid = :programid";
@@ -710,7 +761,7 @@ final class allocation {
                   FROM {enrol_programs_allocations} pa
                   JOIN {enrol_programs_programs} p ON p.id = pa.programid
                   JOIN {enrol_programs_items} pi ON pi.programid = pa.programid AND pi.topitem = 1
-                  JOIN {enrol_programs_completions} pc ON pc.allocationid = pa.id AND pc.itemid = pi.id
+                  JOIN {enrol_programs_completions} pc ON pc.allocationid = pa.id AND pc.itemid = pi.id AND pc.timecompleted <= :now
                  WHERE pa.timecompleted IS NULL
                        AND p.archived = 0 AND pa.archived = 0
                        $programselect $userselect
@@ -727,10 +778,11 @@ final class allocation {
             $user = $DB->get_record('user', ['id' => $allocation->userid]);
 
             self::make_snapshot($allocation->id, 'completion');
-            allocation_calendar_event::adjust_allocation_completion_calendar_events($allocation);
+            calendar::fix_program_events($allocation);
             $event = \enrol_programs\event\program_completed::create_from_allocation($allocation, $program);
             $event->trigger();
             notification\completion::notify_now($user, $program, $source, $allocation);
+            calendar::delete_allocation_events($allocation->id);
         }
         $rs->close();
 
@@ -786,28 +838,29 @@ final class allocation {
     /**
      * Manually update user allocation data including program completion.
      *
-     * @param stdClass $allocatioon
+     * @param stdClass $allocation
      * @return stdClass
      */
-    public static function update_user(stdClass $allocatioon): stdClass {
+    public static function update_user(stdClass $allocation): stdClass {
         global $DB;
 
-        $record = $DB->get_record('enrol_programs_allocations', ['id' => $allocatioon->id], '*', MUST_EXIST);
+        $record = $DB->get_record('enrol_programs_allocations', ['id' => $allocation->id], '*', MUST_EXIST);
+        $program = $DB->get_record('enrol_programs_programs', ['id' => $record->programid], '*', MUST_EXIST);
 
         $trans = $DB->start_delegated_transaction();
 
         self::make_snapshot($record->id, 'allocation_edit_before');
 
-        $record->archived = (int)(bool)$allocatioon->archived;
-        $record->timeallocated = $allocatioon->timeallocated;
-        $record->timestart = $allocatioon->timestart;
-        $record->timedue = $allocatioon->timedue;
+        $record->archived = (int)(bool)$allocation->archived;
+        $record->timeallocated = $allocation->timeallocated;
+        $record->timestart = $allocation->timestart;
+        $record->timedue = $allocation->timedue;
         if (!$record->timedue) {
             $record->timedue = null;
         } else if ($record->timedue <= $record->timestart) {
             throw new \coding_exception('invalid due date');
         }
-        $record->timeend = $allocatioon->timeend;
+        $record->timeend = $allocation->timeend;
         if (!$record->timeend) {
             $record->timeend = null;
         } else if ($record->timeend <= $record->timestart) {
@@ -816,23 +869,24 @@ final class allocation {
         if ($record->timedue && $record->timeend && $record->timedue > $record->timeend) {
             throw new \coding_exception('invalid due date');
         }
-        $record->timecompleted = $allocatioon->timecompleted;
+        $record->timecompleted = $allocation->timecompleted;
         if (!$record->timecompleted) {
             $record->timecompleted = null;
         }
 
         $DB->update_record('enrol_programs_allocations', $record);
 
-        self::make_snapshot($record->id, 'allocation_edit');
+        $allocation = self::make_snapshot($record->id, 'allocation_edit');
 
         $trans->allow_commit();
 
-        self::fix_allocation_sources($record->programid, $record->userid);
-        self::fix_user_enrolments($record->programid, $record->userid);
+        self::fix_allocation_sources($allocation->programid, $allocation->userid);
+        self::fix_user_enrolments($allocation->programid, $allocation->userid);
+        calendar::fix_allocation_events($allocation, $program);
 
-        notification_manager::trigger_notifications($record->programid, $record->userid);
+        notification_manager::trigger_notifications($allocation->programid, $allocation->userid);
 
-        return $DB->get_record('enrol_programs_allocations', ['id' => $record->id], '*', MUST_EXIST);
+        return $allocation;
     }
 
     /**
@@ -847,6 +901,7 @@ final class allocation {
         $trans = $DB->start_delegated_transaction();
 
         $allocation = $DB->get_record('enrol_programs_allocations', ['id' => $data->allocationid], '*', MUST_EXIST);
+        $program = $DB->get_record('enrol_programs_programs', ['id' => $allocation->programid], '*', MUST_EXIST);
         $item = $DB->get_record('enrol_programs_items', ['id' => $data->itemid, 'programid' => $allocation->programid], '*', MUST_EXIST);
         $completion = $DB->get_record('enrol_programs_completions', ['allocationid' => $allocation->id, 'itemid' => $item->id]);
         $evidence = $DB->get_record('enrol_programs_evidences', ['userid' => $allocation->userid, 'itemid' => $item->id]);
@@ -896,7 +951,7 @@ final class allocation {
         $trans->allow_commit();
 
         self::fix_user_enrolments($allocation->programid, $allocation->userid);
-        allocation_calendar_event::adjust_allocation_completion_calendar_events($allocation);
+        calendar::fix_allocation_events($allocation, $program);
     }
 
     /**
@@ -994,7 +1049,7 @@ final class allocation {
      * Make a full user allocation snapshot.
      *
      * @param int $allocationid
-     * @param string $reaons snapshot reason type
+     * @param string $reason snapshot reason type
      * @param string|null $explanation
      * @return \stdClass|null allocation record or null if not exists any more
      */
@@ -1018,9 +1073,6 @@ final class allocation {
 
         foreach ((array)$allocation as $k => $v) {
             if ($k === 'id' || $k === 'timecreated') {
-                continue;
-            }
-            if (strpos($k, 'timenotified') === 0) {
                 continue;
             }
             $data->{$k} = $v;

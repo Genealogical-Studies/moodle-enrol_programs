@@ -52,6 +52,18 @@ final class udplans extends base {
     }
 
     /**
+     * Can settings of this source be imported to other program?
+     *
+     * @param stdClass $fromprogram
+     * @param stdClass $targetprogram
+     * @return bool
+     */
+    public static function is_import_allowed(stdClass $fromprogram, stdClass $targetprogram): bool {
+        // Disabled for now.
+        return false;
+    }
+
+    /**
      * Can existing source of this type be updated or deleted from program?
      *
      * @param stdClass $program
@@ -341,5 +353,34 @@ final class udplans extends base {
             \enrol_programs\local\allocation::update_user($pa);
         }
         $rs->close();
+    }
+
+    /**
+     * Render allocation source information.
+     *
+     * @param stdClass $program
+     * @param stdClass $source
+     * @param stdClass $allocation
+     * @return string HTML fragment
+     */
+    public static function render_allocation_source(stdClass $program, stdClass $source, stdClass $allocation): string {
+        global $DB;
+
+        $type = static::get_type();
+
+        if ($source && $source->type !== $type) {
+            throw new \coding_exception('Invalid source type');
+        }
+
+        $plan = $DB->get_record('tool_udplans_plans', ['id' => $allocation->sourceinstanceid]);
+        if ($plan) {
+            if (\tool_udplans\local\plan::can_view($plan)) {
+                $name = format_string($plan->name);
+                $url = new \moodle_url('/admin/tool/udplans/plan.php', ['id' => $plan->id]);
+                return \html_writer::link($url, $name);
+            }
+        }
+
+        return static::get_name();
     }
 }

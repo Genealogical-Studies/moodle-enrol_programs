@@ -27,11 +27,11 @@ defined('MOODLE_INTERNAL') || die();
 
 /** @var stdClass $plugin */
 
-$plugin->version   = 2023051504;
+$plugin->version   = 2023081200;
 $plugin->requires  = 2022112802.00; // 4.1.2 (Build: 20230313)
 $plugin->component = 'enrol_programs';
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = 'v2.0';
+$plugin->release   = 'v2.1';
 $plugin->supported = [401, 402];
 
-$plugin->dependencies = ['local_openlms' => 2023051500];
+$plugin->dependencies = ['local_openlms' => 2023080600];

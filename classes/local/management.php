@@ -16,6 +16,10 @@
 
 namespace enrol_programs\local;
 
+use enrol_programs\local\content\course;
+use enrol_programs\local\content\item;
+use enrol_programs\local\content\set;
+use enrol_programs\local\content\top;
 use moodle_url, stdClass;
 
 /**
@@ -67,7 +71,7 @@ final class management {
     public static function fetch_programs(?\context $context, bool $archived, string $search, int $page, int $perpage, string $orderby = 'fullname ASC'): array {
         global $DB;
 
-        list($select, $params) = self::get_search_query($context, $search, '');
+        list($select, $params) = self::get_program_search_query($context, $search, '');
 
         $select .= ' AND archived = :archived';
         $params['archived'] = (int)$archived;
@@ -133,7 +137,15 @@ final class management {
         return $result;
     }
 
-    protected static function get_search_query(?\context $context, string $search, string $tablealias = ''): array {
+    /**
+     * Returns program query data.
+     *
+     * @param \context|null $context
+     * @param string $search
+     * @param string $tablealias
+     * @return array
+     */
+    public static function get_program_search_query(?\context $context, string $search, string $tablealias = ''): array {
         global $DB;
 
         if ($tablealias !== '' && substr($tablealias, -1) !== '.') {
@@ -144,13 +156,14 @@ final class management {
         $params = [];
 
         if ($context) {
-            $conditions[] = $tablealias . 'contextid = :prgcontextid';
+            $contextselect = 'AND ' . $tablealias . 'contextid = :prgcontextid';
             $params['prgcontextid'] = $context->id;
+        } else {
+            $contextselect = '';
         }
 
         if (trim($search) !== '') {
             $searchparam = '%' . $DB->sql_like_escape($search) . '%';
-            $conditions = [];
             $fields = ['fullname', 'idnumber', 'description'];
             $cnt = 0;
             foreach ($fields as $field) {
@@ -161,10 +174,10 @@ final class management {
         }
 
         if ($conditions) {
-            $sql = '(' . implode(' OR ', $conditions) . ')';
+            $sql = '(' . implode(' OR ', $conditions) . ') ' . $contextselect;
             return [$sql, $params];
         } else {
-            return ['1=1', $params];
+            return ['1=1 ' . $contextselect, $params];
         }
     }
 
@@ -208,7 +221,6 @@ final class management {
             require_once($CFG->libdir . '/adminlib.php');
             admin_externalpage_setup('programsmanagement', '', null, $pageurl, ['pagelayout' => 'admin', 'nosearch' => true]);
             $PAGE->set_heading(get_string('management', 'enrol_programs'));
-            $PAGE->set_secondary_navigation(false);
         } else {
             $PAGE->set_pagelayout('admin');
             $PAGE->set_context($context);
@@ -226,6 +238,7 @@ final class management {
                 $PAGE->navbar->add(get_string('management', 'enrol_programs'));
             }
         }
+        $PAGE->set_secondary_navigation(false);
 
         $PAGE->set_docs_path("$CFG->wwwroot/enrol/programs/documentation.php/management.md");
     }

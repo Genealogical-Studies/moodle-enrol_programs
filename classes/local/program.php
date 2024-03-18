@@ -149,7 +149,6 @@ final class program {
         $sequence = [
             'children' => [],
             'type' => content\set::SEQUENCE_TYPE_ALLINANYORDER,
-            'minprerequisites' => 1, // No completion possible yet.
         ];
 
         $item = new \stdClass();
@@ -158,7 +157,9 @@ final class program {
         $item->courseid = null;
         $item->fullname = $data->fullname;
         $item->sequencejson = util::json_encode($sequence);
-        $item->minprerequisites = $sequence['minprerequisites'];
+        $item->minprerequisites = 1; // Prevent completion.
+        $item->points = 1;
+        $item->minpoints = null;
         $DB->insert_record('enrol_programs_items', $item);
 
         $program = self::make_snapshot($data->id, 'add');
@@ -250,6 +251,13 @@ final class program {
             $record->creategroups = (int)(bool)$data->creategroups;
         }
 
+        $invalidatecalendarevents = false;
+        if (isset($record->fullname) && $record->fullname != $oldprogram->fullname) {
+            $invalidatecalendarevents = true;
+        } else if (isset($record->description) && $record->description != $oldprogram->description) {
+            $invalidatecalendarevents = true;
+        }
+
         $DB->update_record('enrol_programs_programs', $record);
 
         if ($CFG->usetags && isset($data->tags)) {
@@ -281,6 +289,10 @@ final class program {
             }
         }
 
+        if ($invalidatecalendarevents) {
+            calendar::invalidate_program_events($program->id);
+        }
+
         $program = self::make_snapshot($program->id, 'update_general');
 
         $trans->allow_commit();
@@ -288,7 +300,7 @@ final class program {
         allocation::fix_allocation_sources($program->id, null);
         allocation::fix_enrol_instances($program->id);
         allocation::fix_user_enrolments($program->id, null);
-        allocation_calendar_event::fix_allocation_calendar_events($program);
+        calendar::fix_program_events($program);
 
         $event = \enrol_programs\event\program_updated::create_from_program($program);
         $event->trigger();
@@ -440,12 +452,97 @@ final class program {
         allocation::fix_user_enrolments($program->id, null);
 
         if ($updated) {
-            allocation_calendar_event::fix_allocation_calendar_events($program);
+            calendar::fix_program_events($program);
             $event = \enrol_programs\event\program_updated::create_from_program($program);
             $event->trigger();
         }
 
         return $program;
+    }
+
+    /**
+     * Import program allocation, scheduling and sources from another program.
+     *
+     * NOTE: this does not trigger fixing of enrolments and allocations.
+     *
+     * @param stdClass $data data from \enrol_programs\local\form\program_allocation_import_confirmation
+     * @return stdClass updated program record
+     */
+    public static function import_program_allocation(stdClass $data): stdClass {
+        global $DB;
+
+        $targetprogram = $DB->get_record('enrol_programs_programs', ['id' => $data->id], '*', MUST_EXIST);
+        $fromprogram = $DB->get_record('enrol_programs_programs', ['id' => $data->fromprogram], '*', MUST_EXIST);
+
+        $record = [];
+
+        if (!empty($data->importallocationstart)) {
+            $record['timeallocationstart'] = $fromprogram->timeallocationstart;
+        }
+        if (!empty($data->importallocationend)) {
+            $record['timeallocationend'] = $fromprogram->timeallocationend;
+        }
+        if (!empty($data->importprogramstart)) {
+            $record['startdatejson'] = $fromprogram->startdatejson;
+        }
+        if (!empty($data->importprogramdue)) {
+            $record['duedatejson'] = $fromprogram->duedatejson;
+        }
+        if (!empty($data->importprogramend)) {
+            $record['enddatejson'] = $fromprogram->enddatejson;
+        }
+
+        $trans = $DB->start_delegated_transaction();
+
+        $updated = false;
+        if ($record) {
+            $record = (object)$record;
+            $record->id = $targetprogram->id;
+            if (!property_exists($record, 'timeallocationstart')) {
+                $record->timeallocationstart = $targetprogram->timeallocationstart;
+            }
+            if (!property_exists($record, 'timeallocationend')) {
+                $record->timeallocationend = $targetprogram->timeallocationend;
+            }
+            if ($record->timeallocationstart && $record->timeallocationend
+                && $record->timeallocationstart >= $record->timeallocationend) {
+                throw new \coding_exception('Allocation start must be earlier than end');
+            }
+            $updated = true;
+            $DB->update_record('enrol_programs_programs', $record);
+            $targetprogram = $DB->get_record('enrol_programs_programs', ['id' => $record->id], '*', MUST_EXIST);
+        }
+
+        /** @var \enrol_programs\local\source\base[] $sourceclasses */
+        $sourceclasses = \enrol_programs\local\allocation::get_source_classes();
+        foreach ($sourceclasses as $sourcetype => $sourceclass) {
+            if (empty($data->{'importsource' . $sourcetype})) {
+                continue;
+            }
+            if (!$sourceclass::is_import_allowed($fromprogram, $targetprogram)) {
+                throw new \coding_exception('Cannot import source ' . $sourcetype);
+            }
+            $sourceclass::import_source_data($data->fromprogram, $data->id);
+            $updated = true;
+        }
+
+        $trans->allow_commit();
+
+        if ($updated) {
+            $targetprogram = program::make_snapshot($targetprogram->id, 'import_allocation');
+        }
+
+        allocation::fix_allocation_sources($targetprogram->id, null);
+        allocation::fix_enrol_instances($targetprogram->id);
+        allocation::fix_user_enrolments($targetprogram->id, null);
+
+        if ($updated) {
+            calendar::fix_program_events($targetprogram);
+            $event = \enrol_programs\event\program_updated::create_from_program($targetprogram);
+            $event->trigger();
+        }
+
+        return $targetprogram;
     }
 
     /**
@@ -573,7 +670,7 @@ final class program {
         allocation::fix_allocation_sources($program->id, null);
         allocation::fix_enrol_instances($program->id);
         allocation::fix_user_enrolments($program->id, null);
-        allocation_calendar_event::fix_allocation_calendar_events($program);
+        calendar::fix_program_events($program);
 
         $event = \enrol_programs\event\program_updated::create_from_program($program);
         $event->trigger();
@@ -631,6 +728,9 @@ final class program {
         $DB->delete_records('enrol_programs_cohorts', ['programid' => $program->id]);
         $DB->delete_records('enrol_programs_items', ['programid' => $program->id]);
 
+        $DB->delete_records('enrol_programs_certs_issues', ['programid' => $program->id]);
+        $DB->delete_records('enrol_programs_certs', ['programid' => $program->id]);
+
         // Delete enrolment instances.
         allocation::fix_enrol_instances($program->id);
 
@@ -646,7 +746,7 @@ final class program {
 
         $trans->allow_commit();
 
-        allocation_calendar_event::delete_program_calendar_events($program->id);
+        calendar::delete_program_events($program->id);
 
         $event = \enrol_programs\event\program_deleted::create_from_program($program);
         $event->trigger();
@@ -672,13 +772,15 @@ final class program {
         }
         $data->explanation = $explanation;
 
-        $program = $DB->get_record('enrol_programs_programs', ['id' => $programid]);
-        if (!$program) {
-            // Most have been just deleted.
+        if ($reason === 'delete') {
+            if ($DB->record_exists('enrol_programs_programs', ['id' => $programid])) {
+                throw new \coding_exception('deleted program must not exist');
+            }
             $DB->insert_record('enrol_programs_prg_snapshots', $data);
             return null;
         }
 
+        $program = $DB->get_record('enrol_programs_programs', ['id' => $programid], '*', MUST_EXIST);
         $data->programjson = util::json_encode($program);
         $data->itemsjson = util::json_encode($DB->get_records('enrol_programs_items', ['programid' => $program->id], 'id ASC'));
         $data->cohortsjson = util::json_encode($DB->get_records('enrol_programs_cohorts', ['programid' => $program->id], 'id ASC'));
